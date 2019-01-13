@@ -166,16 +166,16 @@ def calibrate(frame):
         cv2.imshow("preview", order_img)
         cv2.waitKey(0)
         ##  save rectangle points
-        filehandler=open("topLeft.obj","wb")
+        filehandler=open("cam_data/topLeft.obj","wb")
         pickle.dump(topLeft,filehandler)
         filehandler.close()
-        filehandler=open("topRight.obj","wb")
+        filehandler=open("cam_data/topRight.obj","wb")
         pickle.dump(topRight,filehandler)
         filehandler.close()
-        filehandler=open("botLeft.obj","wb")
+        filehandler=open("cam_data/botLeft.obj","wb")
         pickle.dump(botLeft,filehandler)
         filehandler.close()
-        filehandler=open("botRight.obj","wb")
+        filehandler=open("cam_data/botRight.obj","wb")
         pickle.dump(botRight,filehandler)
         filehandler.close()
         ### Get the regions of the breadboard
@@ -300,84 +300,84 @@ def calibrate(frame):
         cv2.waitKey(0)   
 
         ## Save rail coordinates
-        filehandler=open("r_rails.obj","wb")
+        filehandler=open("cam_data/r_rails.obj","wb")
         pickle.dump(r_rails,filehandler)
         filehandler.close()
-        filehandler=open("r2_rails.obj","wb")
+        filehandler=open("cam_data/r2_rails.obj","wb")
         pickle.dump(r2_rails,filehandler)
         filehandler.close()
-        filehandler=open("r3_rails.obj","wb")
+        filehandler=open("cam_data/r3_rails.obj","wb")
         pickle.dump(r3_rails,filehandler)
         filehandler.close()
         ## Save region coordinates
-        filehandler=open("topLeft.obj","wb")
+        filehandler=open("cam_data/topLeft.obj","wb")
         pickle.dump(topLeft,filehandler)
         filehandler.close()
-        filehandler=open("topRight.obj","wb")
+        filehandler=open("cam_data/topRight.obj","wb")
         pickle.dump(topRight,filehandler)
         filehandler.close()
-        filehandler=open("botLeft.obj","wb")
+        filehandler=open("cam_data/botLeft.obj","wb")
         pickle.dump(botLeft,filehandler)
         filehandler.close()
-        filehandler=open("botRight.obj","wb")
+        filehandler=open("cam_data/botRight.obj","wb")
         pickle.dump(botRight,filehandler)
         filehandler.close()
-        filehandler=open("r5_br.obj","wb")
+        filehandler=open("cam_data/r5_br.obj","wb")
         pickle.dump(r5_br,filehandler)
         filehandler.close()
-        filehandler=open("r5_bl.obj","wb")
+        filehandler=open("cam_data/r5_bl.obj","wb")
         pickle.dump(r5_bl,filehandler)
         filehandler.close()
-        filehandler=open("r5_tr.obj","wb")
+        filehandler=open("cam_data/r5_tr.obj","wb")
         pickle.dump(r5_tr,filehandler)
         filehandler.close()
-        filehandler=open("r5_tl.obj","wb")
+        filehandler=open("cam_data/r5_tl.obj","wb")
         pickle.dump(r5_tl,filehandler)
         filehandler.close()
 
-        filehandler=open("r4_br.obj","wb")
+        filehandler=open("cam_data/r4_br.obj","wb")
         pickle.dump(r4_br,filehandler)
         filehandler.close()
-        filehandler=open("r4_bl.obj","wb")
+        filehandler=open("cam_data/r4_bl.obj","wb")
         pickle.dump(r4_bl,filehandler)
         filehandler.close()
-        filehandler=open("r4_tr.obj","wb")
+        filehandler=open("cam_data/r4_tr.obj","wb")
         pickle.dump(r4_tr,filehandler)
         filehandler.close()
-        filehandler=open("r4_tl.obj","wb")
+        filehandler=open("cam_data/r4_tl.obj","wb")
         pickle.dump(r4_tl,filehandler)
         filehandler.close()
 
-        filehandler=open("r3_br.obj","wb")
+        filehandler=open("cam_data/r3_br.obj","wb")
         pickle.dump(r3_br,filehandler)
         filehandler.close()
-        filehandler=open("r3_bl.obj","wb")
+        filehandler=open("cam_data/r3_bl.obj","wb")
         pickle.dump(r3_bl,filehandler)
         filehandler.close()
-        filehandler=open("r3_tr.obj","wb")
+        filehandler=open("cam_data/r3_tr.obj","wb")
         pickle.dump(r3_tr,filehandler)
         filehandler.close()
-        filehandler=open("r3_tl.obj","wb")
+        filehandler=open("cam_data/r3_tl.obj","wb")
         pickle.dump(r3_tl,filehandler)
         filehandler.close()
 
-        filehandler=open("r2_br.obj","wb")
+        filehandler=open("cam_data/r2_br.obj","wb")
         pickle.dump(r2_br,filehandler)
         filehandler.close()
-        filehandler=open("r2_bl.obj","wb")
+        filehandler=open("cam_data/r2_bl.obj","wb")
         pickle.dump(r2_bl,filehandler)
         filehandler.close()
-        filehandler=open("r2_tr.obj","wb")
+        filehandler=open("cam_data/r2_tr.obj","wb")
         pickle.dump(r2_tr,filehandler)
         filehandler.close()
-        filehandler=open("r2_tl.obj","wb")
+        filehandler=open("cam_data/r2_tl.obj","wb")
         pickle.dump(r2_tl,filehandler)
         filehandler.close()
 
-        filehandler=open("r1_br.obj","wb")
+        filehandler=open("cam_data/r1_br.obj","wb")
         pickle.dump(r1_br,filehandler)
         filehandler.close()
-        filehandler=open("r1_bl.obj","wb")
+        filehandler=open("cam_data/r1_bl.obj","wb")
         pickle.dump(r1_bl,filehandler)
         filehandler.close()
 
@@ -385,7 +385,7 @@ def calibrate(frame):
         cv2.destroyAllWindows()
 
 
-def componentDetect(frame, resTemp, capTemp,icTemp,ledTemp):
+def componentDetect(frame, resTemp, capTemp,icTemp,ledTemp,my_path):
         ### Detect Components in frame
                 cv2.destroyAllWindows()
                 resMat=[]
@@ -399,8 +399,8 @@ def componentDetect(frame, resTemp, capTemp,icTemp,ledTemp):
                 src_img = np.copy(frame)
                 img_gray = cv2.cvtColor(src_img, cv2.COLOR_BGR2GRAY)
                 ## Check if resistors
-                for templateFile in os.listdir(resTemp):
-                    tempName= os.path.join(resTemp, templateFile)
+                for templateFile in os.listdir(os.path.join(my_path,resTemp)):
+                    tempName= os.path.join(my_path,resTemp, templateFile)
                     tempName=os.path.join(tempName)
                     template = cv2.imread(tempName)
                     c,w, h  = template.shape[::-1]
@@ -419,8 +419,8 @@ def componentDetect(frame, resTemp, capTemp,icTemp,ledTemp):
                 cv2.destroyAllWindows()
                 ## Check if caps
                 src_img = np.copy(src_img)
-                for templateFile in os.listdir(capTemp):        
-                    tempName= os.path.join(capTemp, templateFile)
+                for templateFile in os.listdir(os.path.join(my_path,capTemp)):        
+                    tempName= os.path.join(my_path,capTemp, templateFile)
                     template = cv2.imread(tempName)
                     c,w, h = template.shape[::-1]
                     res = cv2.matchTemplate(src_img,template,cv2.TM_CCOEFF_NORMED)
@@ -437,8 +437,8 @@ def componentDetect(frame, resTemp, capTemp,icTemp,ledTemp):
                 cv2.waitKey(0)
                 cv2.destroyAllWindows()                
                 ## Check if LEDs
-                for templateFile in os.listdir(ledTemp):
-                    tempName= os.path.join(ledTemp, templateFile)
+                for templateFile in os.listdir(os.path.join(my_path,ledTemp)):
+                    tempName= os.path.join(my_path,ledTemp, templateFile)
                     tempName=os.path.join(tempName)
                     template = cv2.imread(tempName)
                     c,w, h  = template.shape[::-1]
@@ -456,8 +456,8 @@ def componentDetect(frame, resTemp, capTemp,icTemp,ledTemp):
                 cv2.waitKey(0)
                 cv2.destroyAllWindows()
                 ## Check if ICs
-                for templateFile in os.listdir(icTemp):
-                    tempName= os.path.join(icTemp, templateFile)
+                for templateFile in os.listdir(os.path.join(my_path,icTemp)):
+                    tempName= os.path.join(my_path,icTemp, templateFile)
                     tempName=os.path.join(tempName)
                     template = cv2.imread(tempName)
                     c,w, h  = template.shape[::-1]
@@ -660,31 +660,31 @@ def railLocate(c,img_rgb,thresh_img):
                  
 
         #load the region coords
-        topLeft=np.array(pickle.load(open("topLeft.obj","rb"))).flatten()
-        topRight=np.array(pickle.load(open("topRight.obj","rb"))).flatten()
-        botLeft=np.array(pickle.load(open("botLeft.obj","rb"))).flatten()
-        botRight=np.array(pickle.load(open("botRight.obj","rb"))).flatten()
-        r1_bl=np.array(pickle.load(open("r1_bl.obj","rb"))).flatten()
-        r1_br=np.array(pickle.load(open("r1_br.obj","rb"))).flatten()
-        r2_bl=np.array(pickle.load(open("r2_bl.obj","rb"))).flatten()
-        r2_br=np.array(pickle.load(open("r2_br.obj","rb"))).flatten()
-        r2_tl=np.array(pickle.load(open("r2_tl.obj","rb"))).flatten()
-        r2_tr=np.array(pickle.load(open("r2_tr.obj","rb"))).flatten()
-        r3_bl=np.array(pickle.load(open("r3_bl.obj","rb"))).flatten()
-        r3_br=np.array(pickle.load(open("r3_br.obj","rb"))).flatten()
-        r3_tl=np.array(pickle.load(open("r3_tl.obj","rb"))).flatten()
-        r3_tr=np.array(pickle.load(open("r3_tr.obj","rb"))).flatten()
-        r4_bl=np.array(pickle.load(open("r4_bl.obj","rb"))).flatten()
-        r4_br=np.array(pickle.load(open("r4_br.obj","rb"))).flatten()
-        r4_tl=np.array(pickle.load(open("r4_tl.obj","rb"))).flatten()
-        r4_tr=np.array(pickle.load(open("r4_tr.obj","rb"))).flatten()
-        r5_bl=np.array(pickle.load(open("r5_bl.obj","rb"))).flatten()
-        r5_br=np.array(pickle.load(open("r5_br.obj","rb"))).flatten()
-        r5_tl=np.array(pickle.load(open("r5_tl.obj","rb"))).flatten()
-        r5_tr=np.array(pickle.load(open("r5_tr.obj","rb"))).flatten()
+        topLeft=np.array(pickle.load(open("cam_data/topLeft.obj","rb"))).flatten()
+        topRight=np.array(pickle.load(open("cam_data/topRight.obj","rb"))).flatten()
+        botLeft=np.array(pickle.load(open("cam_data/botLeft.obj","rb"))).flatten()
+        botRight=np.array(pickle.load(open("cam_data/botRight.obj","rb"))).flatten()
+        r1_bl=np.array(pickle.load(open("cam_data/r1_bl.obj","rb"))).flatten()
+        r1_br=np.array(pickle.load(open("cam_data/r1_br.obj","rb"))).flatten()
+        r2_bl=np.array(pickle.load(open("cam_data/r2_bl.obj","rb"))).flatten()
+        r2_br=np.array(pickle.load(open("cam_data/r2_br.obj","rb"))).flatten()
+        r2_tl=np.array(pickle.load(open("cam_data/r2_tl.obj","rb"))).flatten()
+        r2_tr=np.array(pickle.load(open("cam_data/r2_tr.obj","rb"))).flatten()
+        r3_bl=np.array(pickle.load(open("cam_data/r3_bl.obj","rb"))).flatten()
+        r3_br=np.array(pickle.load(open("cam_data/r3_br.obj","rb"))).flatten()
+        r3_tl=np.array(pickle.load(open("cam_data/r3_tl.obj","rb"))).flatten()
+        r3_tr=np.array(pickle.load(open("cam_data/r3_tr.obj","rb"))).flatten()
+        r4_bl=np.array(pickle.load(open("cam_data/r4_bl.obj","rb"))).flatten()
+        r4_br=np.array(pickle.load(open("cam_data/r4_br.obj","rb"))).flatten()
+        r4_tl=np.array(pickle.load(open("cam_data/r4_tl.obj","rb"))).flatten()
+        r4_tr=np.array(pickle.load(open("cam_data/r4_tr.obj","rb"))).flatten()
+        r5_bl=np.array(pickle.load(open("cam_data/r5_bl.obj","rb"))).flatten()
+        r5_br=np.array(pickle.load(open("cam_data/r5_br.obj","rb"))).flatten()
+        r5_tl=np.array(pickle.load(open("cam_data/r5_tl.obj","rb"))).flatten()
+        r5_tr=np.array(pickle.load(open("cam_data/r5_tr.obj","rb"))).flatten()
 
-        r2_rails=pickle.load(open("r2_rails.obj","rb"))
-        r3_rails=pickle.load(open("r3_rails.obj","rb"))
+        r2_rails=pickle.load(open("cam_data/r2_rails.obj","rb"))
+        r3_rails=pickle.load(open("cam_data/r3_rails.obj","rb"))
 
         r2_rail_check=np.zeros((len(r2_rails),1))
         r3_rail_check=np.zeros((len(r3_rails),1))
@@ -852,15 +852,15 @@ def check(x1,y1,x2,y2,x,y):
 ##figPathR = 'C:\Python27\shape-detection\shape-detection\snapshots\R'
 ##figPathB = 'C:\Python27\shape-detection\shape-detection\snapshots\B'
 ##figSavePath = 'C:\Python27\shape-detection\shape-detection\Match'
-##
+####
 ##capTemp=r'C:\Python27\shape-detection\shape-detection\templates\caps'
 ##icTemp=r'C:\Python27\shape-detection\shape-detection\templates\ic'
 ##ledTemp=r'C:\Python27\shape-detection\shape-detection\templates\led'
 ##resTemp=r'C:\Python27\shape-detection\shape-detection\templates\resistors'
-##
+####
 ##capPath=r'C:\Python27\shape-detection\shape-detection\snapshots\R'
 ##
-###calibrate: camera looks at the blank breadboard 
+##calibrate: camera looks at the blank breadboard 
 ####
 ####print getattr(cv2,"CAP_PROP_BRIGHTNESS")
 ####print getattr(cv2,"CAP_PROP_EXPOSURE")

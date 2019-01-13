@@ -25,7 +25,7 @@ print "initializing program"
     #TBD
     #setup GUI
 #RUN WITH ARDUINO WORKING?
-elecHardware = False
+elecHardware = True
 photoHardware = False
 
 
@@ -46,14 +46,14 @@ else:
 grid = GridAndNodesAndComps()
 grid.initialize()
 
-##figPathR = 'C:\Python27\shape-detection\shape-detection\snapshots\R'
-##figPathB = 'C:\Python27\shape-detection\shape-detection\snapshots\B'
-##figSavePath = 'C:\Python27\shape-detection\shape-detection\Match'
+figPathR = 'cam_data\snapshots\R'
+figPathB = 'cam_data\snapshots\B'
+figSavePath = 'cam_data\Match'
 ##
-##capTemp=r'C:\Python27\shape-detection\shape-detection\templates\caps'
-##icTemp=r'C:\Python27\shape-detection\shape-detection\templates\ic'
-##ledTemp=r'C:\Python27\shape-detection\shape-detection\templates\led'
-##resTemp=r'C:\Python27\shape-detection\shape-detection\templates\resistors'
+capTemp=r'cam_data\templates\caps'
+icTemp=r'cam_data\templates\ic'
+ledTemp=r'cam_data\templates\led'
+resTemp=r'cam_data\templates\resistors'
 ##
 ##numRails=16
 
@@ -139,15 +139,21 @@ while(LETSBUILD):
                         fgmask = fgbg.apply(frame) #subtract
                         now=datetime.datetime.now() #getting time for filename
                         # save the real frame and background subtracted frame
+                        my_path = os.path.abspath(os.path.dirname(__file__))
                         fileName = 'fig' + now.strftime("%Y-%m-%d %H%M%S") 
-                        completeNameB = os.path.join(figPathB, fileName + 'B.png')
-                        completeNameR = os.path.join(figPathR, fileName + 'R.png')          
+                        #completeNameB = os.path.join(figPathB, fileName + 'B.png')
+                        completeNameB=figPathB+ '\\' + fileName+'B.png'
+                        #completeNameR = os.path.join(figPathR, fileName + 'R.png')          
+                        completeNameR=figPathR+'\\'+fileName+'R.png'
                         snapshot(completeNameB,rval,fgmask) #save snapshot
                         snapshot(completeNameR,rval,frame)
-                        #component detection
-                        compType=componentDetect(frame, resTemp, capTemp,icTemp,ledTemp)
+                        #component detection                        
+                        compType=componentDetect(frame, resTemp, capTemp,icTemp,ledTemp,my_path)
                         #component location
-                        railOne,railTwo=componentLocate(fgmask,frame, resCount,capCount,ledCount,icCount,numRails)
+                        railOne,railTwo=componentLocate(fgmask,frame, 1,0,0,0)
+                        print railOne,railTwo
+                        railOne=1
+                        railTwo=5
                         # continue while loop for user to add another component.
                         
         cv2.destroyAllWindows()
@@ -164,105 +170,111 @@ while(LETSBUILD):
         else:
             continue
         
-##    JAMESONISGO = True
-##    while(JAMESONISGO):
-##
-##        lastComponentName = compType #always resistor for now
-##        railOne = int(railOne) - 1
-##        railTwo = int(railTwo) - 1
-##        
-##        if (text == "kill"):
-##            break
-##        else:
-##            contents = text.split()
-##            if lastComponentName == "resistor":
-##                otherComponents = [] #FOR TIME BEING - ASSUME NO OTHER COMPONENTS IN PARALLEL
-##                # COMMAND: buildResistor(self, rail1, rail2, otherComponents=[])
-##                # Checks the resistance of a resistor between rail1 and rail2, and returns the resistance value in Ohms
-##                #
-##                # eg. arduino.buildResistor(0, 2, [["resistor", 1000], ["resistor", 5000]])
-##                #  Note that if you don't have any other components in parallel then you only have to provide 2 arguments
-##                #   since otherComponents will default to [] if nothing is provided
-##                print arduino.buildResistor(int(railOne), int(railTwo), otherComponents) #NOTE: railOne and railTwo
-##            elif (lastComponentName == "capacitor"):
-##                otherComponents = []
-##                # COMMAND: buildCapacitor(self, rail1, rail2, otherComponents=[])
-##                # Checks the capacitance of a capacitor between rail1 and rail2, and returns the capacitance value in uF
-##                # eg. arduino.buildCapacitor(0, 1)
-##                print arduino.buildCapacitor(int(railOne), int(railTwo), otherComponents)
-##            elif (lastComponentName == "diode"):
-##                otherComponents = []
-##                # COMMAND: buildDiode(self, rail1, rail2, otherComponents=[])
-##                # Checks the polarity of the diode between rail1 and rail2, and returns either arduinoController.CONSTANTS["FORWARD_BIAS"]
-##                #  if rail1 is the positive end, or arduinoController.CONSTANTS["REVERSE_BIAS"] if rail2 is the positive end
-##                # eg. arduino.buildDiode(5, 6)
-##                val = arduino.buildDiode(int(railOne), int(railTwo), otherComponents)
-##                if val == arduinoController.CONSTANTS["FORWARD_BIAS"]:
-##                    print "Forward Biased. Flows from rail " + railOne + " to " + railTwo
-##                else:
-##                    print "Reverse Biased. Flows from rail " + railOne + " to " + railTwo
-##            else:
-##                print "Error: Unexpected input. Discarding command"
-##
-##            moveOn = raw_input("Jamesons modules done...move on to Abis? (yes/no): ")
-##            if (moveOn == "yes"):
-##                JAMESONISGO = False
-##                print "Moving on to Abis mods...."
-##            else:
-##                continue
-##                
-##
-####    nextComponent = Component()    
-####    nextComponent.nextComponent("R","9.95k","default",2,4,[0,0,0,0]) #VALUES NEED TO BE CORRECTED
-####    grid.addComponent(nextComponent)
-####
-####    grid.drawGrid()
-##
-##    moveOn = raw_input("Component added...move on to Check? (yes/no): ")
-##    if (moveOn == "yes"):
-##        LETSBUILD = False
-##        print "Moving on to CHECK mode...."
-##    else:
-##        continue
-##
-##
-##LETSCHECK = True
-##while(LETSCHECK):
-##    print "Here will be checking code.....TBD"
-##    moveOn = raw_input("Board has been checked...power on board? (yes/no): ")
-##    if (moveOn=="yes"):
-##        print "Powering on!"
-##        LETSCHECK = False #move on for now...
-##    else:
-##        continue
-##
-### This one switches the Arduino to the Run mode
-##arduino.changeMode(arduinoController.CONSTANTS["MODE_RUN"])
-### This one actually turns the power on and off
-##arduino.runPower(arduinoController.CONSTANTS["SWITCH_ON"])
-##
-##LETSRUN = True
-##count = 0
-##while(LETSRUN):   
+    JAMESONISGO = True
+    while(JAMESONISGO):
+
+        lastComponentName = compType #always resistor for now
+        railOne = int(railOne) - 1
+        railTwo = int(railTwo) - 1
+        
+        if (text == "kill"):
+            break
+        else:
+            contents = text.split()
+            if lastComponentName == "resistor":
+                otherComponents = [] #FOR TIME BEING - ASSUME NO OTHER COMPONENTS IN PARALLEL
+                # COMMAND: buildResistor(self, rail1, rail2, otherComponents=[])
+                # Checks the resistance of a resistor between rail1 and rail2, and returns the resistance value in Ohms
+                #
+                # eg. arduino.buildResistor(0, 2, [["resistor", 1000], ["resistor", 5000]])
+                #  Note that if you don't have any other components in parallel then you only have to provide 2 arguments
+                #   since otherComponents will default to [] if nothing is provided
+                compVal= arduino.buildResistor(int(railOne), int(railTwo), otherComponents) #NOTE: railOne and railTwo
+            elif (lastComponentName == "capacitor"):
+                otherComponents = []
+                # COMMAND: buildCapacitor(self, rail1, rail2, otherComponents=[])
+                # Checks the capacitance of a capacitor between rail1 and rail2, and returns the capacitance value in uF
+                # eg. arduino.buildCapacitor(0, 1)
+                print arduino.buildCapacitor(int(railOne), int(railTwo), otherComponents)
+            elif (lastComponentName == "diode"):
+                otherComponents = []
+                # COMMAND: buildDiode(self, rail1, rail2, otherComponents=[])
+                # Checks the polarity of the diode between rail1 and rail2, and returns either arduinoController.CONSTANTS["FORWARD_BIAS"]
+                #  if rail1 is the positive end, or arduinoController.CONSTANTS["REVERSE_BIAS"] if rail2 is the positive end
+                # eg. arduino.buildDiode(5, 6)
+                val = arduino.buildDiode(int(railOne), int(railTwo), otherComponents)
+                if val == arduinoController.CONSTANTS["FORWARD_BIAS"]:
+                    print "Forward Biased. Flows from rail " + railOne + " to " + railTwo
+                else:
+                    print "Reverse Biased. Flows from rail " + railOne + " to " + railTwo
+            else:
+                print "Error: Unexpected input. Discarding command"
+            print compVal
+
+            moveOn = raw_input("Jamesons modules done...move on to Abis? (yes/no): ")
+            if (moveOn == "yes"):
+                JAMESONISGO = False
+                print "Moving on to Abis mods...."
+            else:
+                continue
+                
+
+    nextComponent = Component()    
+    nextComponent.newComponent("R",str(compVal),"default",railOne,railTwo,[0,0,0,0]) #VALUES NEED TO BE CORRECTED
+    grid.addComponent(nextComponent)
+
+    grid.drawGrid()
+
+    moveOn = raw_input("Component added...move on to Check? (yes/no): ")
+    if (moveOn == "yes"):
+        LETSBUILD = False
+        print "Moving on to CHECK mode...."
+    else:
+        continue
+
+
+LETSCHECK = True
+while(LETSCHECK):
+    print "Here will be checking code.....TBD"
+    moveOn = raw_input("Board has been checked...power on board? (yes/no): ")
+    if (moveOn=="yes"):
+        print "Powering on!"
+        LETSCHECK = False #move on for now...
+    else:
+        continue
+
+# This one switches the Arduino to the Run mode
+arduino.changeMode(arduinoController.CONSTANTS["MODE_RUN"])
+# This one actually turns the power on and off
+arduino.runPower(arduinoController.CONSTANTS["SWITCH_ON"])
+
+LETSRUN = True
+count = 0
+while(LETSRUN):   
 ##    railNums = []
-##        for i in contents[1:]:
-##            if (not arduinoController.isInt(i)):
-##                print "Invalid input"
-##                continue
-##            else:
-##                railNums.append(int(i))
-##        ans = arduino.runVoltage(railNums)
-##        for i in ans:
-##            print i, ans[i]
-##
-##        count = count + 1
-##        if (count > 100):
-##            moveOn = raw_input("Board has been checked...power on board? (yes/no): ")
-##                if (moveOn=="yes"):
-##                print "Powering on!"
-##                LETSCHECK = False #move on for now...
-##        else:
+##    for i in [railOne,railTwo]:
+##        if (not arduinoController.isInt(i)):
+##            print "Invalid input"
 ##            continue
+##        else:
+##            railNums.append(int(i))
+    ans = arduino.runVoltage([railOne,railTwo])
+    for i in ans:
+        print i, ans[i]
+
+    count = count + 1
+    if (count > 100):
+        moveOn = raw_input("Board has been checked...power on board? (yes/no): ")
+        if (moveOn=="yes"):
+            print "Powering on!"
+            LETSRUN = False #move on for now...
+        else:
+            continue
+
+print "Turning off the board....."
+arduino.runPower(arduinoController.CONSTANTS["SWITCH_OFF"])
+arduino.changeMode(arduinoController.CONSTANTS["MODE_BUILD"])
+
 
         #JAMESONS MODULE(s) returns -> type of component, value of component, location of component
         #check output (will need to discuss who will be covering error handling....)    

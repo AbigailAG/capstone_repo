@@ -3,7 +3,7 @@ import serial.tools.list_ports
 import time
 import math
 from numpy import std
-from matplotlib import pyplot as plt
+#from matplotlib import pyplot as plt
 from fractions import Fraction
 
 '''
