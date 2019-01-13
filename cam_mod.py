@@ -2,6 +2,7 @@
 ### then finds location
 ### Created 2018-11-18
 ### Created by: Lindsay Vasilak
+### last modified: 2019-Jan-13
 
 import numpy as np
 import os
