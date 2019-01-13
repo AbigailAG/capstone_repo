@@ -55,7 +55,7 @@ grid.initialize()
 ##ledTemp=r'C:\Python27\shape-detection\shape-detection\templates\led'
 ##resTemp=r'C:\Python27\shape-detection\shape-detection\templates\resistors'
 ##
-##numRails=30
+##numRails=16
 
 #---end initialize---
 
@@ -105,52 +105,52 @@ while(LETSBUILD):
     LINDSAYISGO = True
     while(LINDSAYISGO):
         
-##        #snapshot
-##        ###initiate video feed after the calibration is finished
-##        cv2.namedWindow("backgroundSubtract")#defining a window
-##        cv2.namedWindow("preview")
-##        vc = cv2.VideoCapture(0) #start and define video capture
-##        fgbg=cv2.createBackgroundSubtractorMOG2(history=1000, varThreshold=75, detectShadows=False) #setting function parameters, not actual frames
-##        subFlag=1 #later
-##        if vc.isOpened(): # try to get the first frame - check if camera is opened
-##            rval, frame = vc.read()   #read the frame for fun!
-##            fgmask = fgbg.apply(frame) #apply the subtract for fun!
-##        else:
-##            rval = False #if it doesn't work, we have problems....deal with those later!
-##        while rval:
-##                    cv2.imshow("preview", frame) #show preview window - frame goes here
-##                    cv2.imshow("backgroundSubtract",fgmask) #show background sub window - fgmask goes here
-##                    rval, frame = vc.read() #take another frame - for fun!
-##                    if subFlag==1: #subFlag means we want to background subtract
-##                        fgmask = fgbg.apply(frame) #background subtract from frame
-##                    key = cv2.waitKey(20) #check for userkey every whatever # of frames?    
-##                    if key == 27: # exit on ESC - get out of jail free
-##                        cv2.destroyAllWindows()
-##                        vc.release()
-##                        break
-##                    if key == 98: #pause the videoCapture for user to place component
-##                        subFlag=0 #keep taking video feed but without any background subtract - in future may stop video here then background subtract after
-##                    if key == 99: #component has been placed. Now time to detect and locate
-##                        #vc.release() 
-##                        subFlag=1 
-##                        #wait 3 seconds for the camera to focus
-##                        time.sleep(3)
-##                        rval, frame = vc.read() #read the frame
-##                        fgmask = fgbg.apply(frame) #subtract
-##                        now=datetime.datetime.now() #getting time for filename
-##                        # save the real frame and background subtracted frame
-##                        fileName = 'fig' + now.strftime("%Y-%m-%d %H%M%S") 
-##                        completeNameB = os.path.join(figPathB, fileName + 'B.png')
-##                        completeNameR = os.path.join(figPathR, fileName + 'R.png')          
-##                        snapshot(completeNameB,rval,fgmask) #save snapshot
-##                        snapshot(completeNameR,rval,frame)
-##                        #component detection
-##                        resCount,capCount,ledCount,icCount=componentDetect(frame, resTemp, capTemp,icTemp,ledTemp)
-##                        #component location
-##                        railOne,railTwo=componentLocate(fgmask,frame, resCount,capCount,ledCount,icCount,numRails)
-##                        # continue while loop for user to add another component.
-##                        
-##        cv2.destroyAllWindows()
+        #snapshot
+        ###initiate video feed after the calibration is finished
+        cv2.namedWindow("backgroundSubtract")#defining a window
+        cv2.namedWindow("preview")
+        vc = cv2.VideoCapture(0) #start and define video capture
+        fgbg=cv2.createBackgroundSubtractorMOG2(history=1000, varThreshold=75, detectShadows=False) #setting function parameters, not actual frames
+        subFlag=1 #later
+        if vc.isOpened(): # try to get the first frame - check if camera is opened
+            rval, frame = vc.read()   #read the frame for fun!
+            fgmask = fgbg.apply(frame) #apply the subtract for fun!
+        else:
+            rval = False #if it doesn't work, we have problems....deal with those later!
+        while rval:
+                    cv2.imshow("preview", frame) #show preview window - frame goes here
+                    cv2.imshow("backgroundSubtract",fgmask) #show background sub window - fgmask goes here
+                    rval, frame = vc.read() #take another frame - for fun!
+                    if subFlag==1: #subFlag means we want to background subtract
+                        fgmask = fgbg.apply(frame) #background subtract from frame
+                    key = cv2.waitKey(20) #check for userkey every whatever # of frames?    
+                    if key == 27: # exit on ESC - get out of jail free
+                        cv2.destroyAllWindows()
+                        vc.release()
+                        break
+                    if key == 98: #pause the videoCapture for user to place component
+                        subFlag=0 #keep taking video feed but without any background subtract - in future may stop video here then background subtract after
+                    if key == 99: #component has been placed. Now time to detect and locate
+                        #vc.release() 
+                        subFlag=1 
+                        #wait 3 seconds for the camera to focus
+                        time.sleep(3)
+                        rval, frame = vc.read() #read the frame
+                        fgmask = fgbg.apply(frame) #subtract
+                        now=datetime.datetime.now() #getting time for filename
+                        # save the real frame and background subtracted frame
+                        fileName = 'fig' + now.strftime("%Y-%m-%d %H%M%S") 
+                        completeNameB = os.path.join(figPathB, fileName + 'B.png')
+                        completeNameR = os.path.join(figPathR, fileName + 'R.png')          
+                        snapshot(completeNameB,rval,fgmask) #save snapshot
+                        snapshot(completeNameR,rval,frame)
+                        #component detection
+                        compType=componentDetect(frame, resTemp, capTemp,icTemp,ledTemp)
+                        #component location
+                        railOne,railTwo=componentLocate(fgmask,frame, resCount,capCount,ledCount,icCount,numRails)
+                        # continue while loop for user to add another component.
+                        
+        cv2.destroyAllWindows()
         
 
             #send packaged output from LINDSAYS MODULE(s) to JAMESONS MODULE(s)
@@ -164,190 +164,105 @@ while(LETSBUILD):
         else:
             continue
         
-    JAMESONISGO = True
-    while(JAMESONISGO):
-
-        text = NEED INPUT FROM LINDSAYS MODS HERE
-        
-        if (text == "kill"):
-            break
-        else:
-            contents = text.split()
-            if (len(contents) == 2) and (contents[0] == "mode"):
-                # COMMAND: changeMode(self, mode)
-                # Use this to change between MODE_BUILD and MODE_RUN in normal operation, or MODE_DEBUG if something
-                #  goes terribly wrong and you need operator intervention
-                # eg. arduino.changeMode(arduinoController.CONTENTS["MODE_BUILD"])
-                print arduino.changeMode(int(contents[1]))
-            elif (len(contents) == 2) and (contents[0] == "change"):
-                # Don't use this in normal circumstances
-                print arduino.changeReferenceResistor(int(contents[1]))
-            elif (len(contents) >= 3) and (contents[0] == "resistor"):
-                # COMMAND: buildResistor(self, rail1, rail2, otherComponents=[])
-                # Checks the resistance of a resistor between rail1 and rail2, and returns the resistance value in Ohms
-                #
-                # eg. arduino.buildResistor(0, 2, [["resistor", 1000], ["resistor", 5000]])
-                #  Note that if you don't have any other components in parallel then you only have to provide 2 arguments
-                #   since otherComponents will default to [] if nothing is provided
-                otherComponents = []
-                if (len(contents) > 3):
-                    for i in contents[3:]:
-                        split = i.split(",")
-                        if arduinoController.isFloat(split[1]):
-                            otherComponents.append([split[0], float(split[1])])
-                        else:
-                            otherComponents.append(split)
-                print arduino.buildResistor(int(contents[1]), int(contents[2]), otherComponents) #NOTE: railOne and railTwo
-            elif (len(contents) >= 3) and (contents[0] == "capacitor"):
-                # COMMAND: buildCapacitor(self, rail1, rail2, otherComponents=[])
-                # Checks the capacitance of a capacitor between rail1 and rail2, and returns the capacitance value in uF
-                # eg. arduino.buildCapacitor(0, 1)
-                otherComponents = []
-                if (len(contents) > 3):
-                    for i in contents[3:]:
-                        split = i.split(",")
-                        if arduinoController.isFloat(split[1]):
-                            otherComponents.append([split[0], float(split[1])])
-                        else:
-                            otherComponents.append(split)
-                print arduino.buildCapacitor(int(contents[1]), int(contents[2]), otherComponents)
-            elif (len(contents) >= 3) and (contents[0] == "capacitor2"):
-                # Obsoleted. Do not use
-                otherComponents = []
-                if (len(contents) > 3):
-                    for i in contents[3:]:
-                        split = i.split(",")
-                        if arduinoController.isFloat(split[1]):
-                            otherComponents.append([split[0], float(split[1])])
-                        else:
-                            otherComponents.append(split)
-                print arduino.buildCapacitor2(int(contents[1]), int(contents[2]), otherComponents)
-            elif (len(contents) >= 3) and (contents[0] == "diode"):
-                # COMMAND: buildDiode(self, rail1, rail2, otherComponents=[])
-                # Checks the polarity of the diode between rail1 and rail2, and returns either arduinoController.CONSTANTS["FORWARD_BIAS"]
-                #  if rail1 is the positive end, or arduinoController.CONSTANTS["REVERSE_BIAS"] if rail2 is the positive end
-                # eg. arduino.buildDiode(5, 6)
-                otherComponents = []
-                if (len(contents) > 3):
-                    for i in contents[3:]:
-                        split = i.split(",")
-                        if arduinoController.isFloat(split[1]):
-                            otherComponents.append([split[0], float(split[1])])
-                        else:
-                            otherComponents.append(split)
-                val = arduino.buildDiode(int(contents[1]), int(contents[2]), otherComponents)
-                if val == arduinoController.CONSTANTS["FORWARD_BIAS"]:
-                    print "Forward Biased. Flows from rail " + contents[1] + " to " + contents[2]
-                else:
-                    print "Reverse Biased. Flows from rail " + contents[2] + " to " + contents[1]
-            elif (len(contents) >= 3) and (contents[0] == "resistorComp"):
-                # Obsoleted. Do not use
-                otherComponents = []
-                if (len(contents) > 3):
-                    for i in contents[3:]:
-                        split = i.split(",")
-                        if arduinoController.isFloat(split[1]):
-                            otherComponents.append([split[0], float(split[1])])
-                        else:
-                            otherComponents.append(split)
-                print arduino.buildResistorComp(int(contents[1]), int(contents[2]), otherComponents)
-            elif (len(contents) >= 3) and (contents[0] == "capacitorComp"):
-                # Internal testing. Do not use
-                otherComponents = []
-                if (len(contents) > 3):
-                    for i in contents[3:]:
-                        split = i.split(",")
-                        if arduinoController.isFloat(split[1]):
-                            otherComponents.append([split[0], float(split[1])])
-                        else:
-                            otherComponents.append(split)
-                print arduino.buildCapacitorComp(int(contents[1]), int(contents[2]), otherComponents)
-            elif (len(contents) >= 3) and (contents[0] == "capacitorMix"):
-                # Obsoleted. Do not use
-                otherComponents = []
-                if (len(contents) > 3):
-                    for i in contents[3:]:
-                        split = i.split(",")
-                        if arduinoController.isFloat(split[1]):
-                            otherComponents.append([split[0], float(split[1])])
-                        else:
-                            otherComponents.append(split)
-                print arduino.buildCapacitorMix(int(contents[1]), int(contents[2]), otherComponents)
-            elif (all(arduinoController.isInt(x) for x in contents)):
-                # Need to do more extensive test here in case inputs are not ints, but for now this can do
-                # COMMAND: debugCommand(self, bytes)
-                # Interface directly with the Arduino serial communications and send a series of bytes through the Arduino
-                #  serial communications.
-                # Note that you really need to make sure that you know what you're sending when you use this, as it is a
-                #  direct communication port to the Arduino. Also you probably want to make use of the arduinoController.CONSTANTS
-                #  dictionary to make communications easier.
-                # eg. arduino.debugCommand([5, 1])
-                if arduinoController.DEBUG: print "Hello let's debug"
-                # The arduino.debugSerial method is really a wrapper method around debugCommand to convert a string input
-                #  into a list of ints first.
-                print arduino.debugSerial(text)
-            elif (text.split(":")[0] == "eval"):
-                # This is direct code injection. Don't use.
-                eval(text.split(":")[1:])
-            else:
-                print "Error: Unexpected input. Discarding command"
-
-            moveOn = raw_input("Jamesons modules done...move on to Abis? (yes/no): ")
-            if (moveOn == "yes"):
-                JAMESONISGO = False
-                print "Moving on to Abis mods...."
-            else:
-                continue
-                
-
-    nextComponent = Component()    
-    nextComponent.nextComponent("R","9.95k","default",2,4,[0,0,0,0]) #VALUES NEED TO BE CORRECTED
-    grid.addComponent(nextComponent)
-
-    grid.drawGrid()
-
-    moveOn = raw_input("Component added...move on to Check? (yes/no): ")
-    if (moveOn == "yes"):
-        LETSBUILD = False
-        print "Moving on to CHECK mode...."
-    else:
-        continue
-
-
-LETSCHECK = True
-while(LETSCHECK):
-    print "Here will be checking code.....TBD"
-    moveOn = raw_input("Board has been checked...power on board? (yes/no): ")
-    if (moveOn=="yes"):
-        print "Powering on!"
-        LETSCHECK = False #move on for now...
-    else:
-        continue
-
-arduino.runPower(arduinoController.CONSTANTS["SWITCH_ON"])
-
-LETSRUN = True
-count = 0
-while(LETSRUN):   
-    railNums = []
-        for i in contents[1:]:
-            if (not arduinoController.isInt(i)):
-                print "Invalid input"
-                continue
-            else:
-                railNums.append(int(i))
-        ans = arduino.runVoltage(railNums)
-        for i in ans:
-            print i, ans[i]
-
-        count = count + 1
-        if (count > 100):
-            moveOn = raw_input("Board has been checked...power on board? (yes/no): ")
-                if (moveOn=="yes"):
-                print "Powering on!"
-                LETSCHECK = False #move on for now...
-        else:
-            continue
+##    JAMESONISGO = True
+##    while(JAMESONISGO):
+##
+##        lastComponentName = compType #always resistor for now
+##        railOne = int(railOne) - 1
+##        railTwo = int(railTwo) - 1
+##        
+##        if (text == "kill"):
+##            break
+##        else:
+##            contents = text.split()
+##            if lastComponentName == "resistor":
+##                otherComponents = [] #FOR TIME BEING - ASSUME NO OTHER COMPONENTS IN PARALLEL
+##                # COMMAND: buildResistor(self, rail1, rail2, otherComponents=[])
+##                # Checks the resistance of a resistor between rail1 and rail2, and returns the resistance value in Ohms
+##                #
+##                # eg. arduino.buildResistor(0, 2, [["resistor", 1000], ["resistor", 5000]])
+##                #  Note that if you don't have any other components in parallel then you only have to provide 2 arguments
+##                #   since otherComponents will default to [] if nothing is provided
+##                print arduino.buildResistor(int(railOne), int(railTwo), otherComponents) #NOTE: railOne and railTwo
+##            elif (lastComponentName == "capacitor"):
+##                otherComponents = []
+##                # COMMAND: buildCapacitor(self, rail1, rail2, otherComponents=[])
+##                # Checks the capacitance of a capacitor between rail1 and rail2, and returns the capacitance value in uF
+##                # eg. arduino.buildCapacitor(0, 1)
+##                print arduino.buildCapacitor(int(railOne), int(railTwo), otherComponents)
+##            elif (lastComponentName == "diode"):
+##                otherComponents = []
+##                # COMMAND: buildDiode(self, rail1, rail2, otherComponents=[])
+##                # Checks the polarity of the diode between rail1 and rail2, and returns either arduinoController.CONSTANTS["FORWARD_BIAS"]
+##                #  if rail1 is the positive end, or arduinoController.CONSTANTS["REVERSE_BIAS"] if rail2 is the positive end
+##                # eg. arduino.buildDiode(5, 6)
+##                val = arduino.buildDiode(int(railOne), int(railTwo), otherComponents)
+##                if val == arduinoController.CONSTANTS["FORWARD_BIAS"]:
+##                    print "Forward Biased. Flows from rail " + railOne + " to " + railTwo
+##                else:
+##                    print "Reverse Biased. Flows from rail " + railOne + " to " + railTwo
+##            else:
+##                print "Error: Unexpected input. Discarding command"
+##
+##            moveOn = raw_input("Jamesons modules done...move on to Abis? (yes/no): ")
+##            if (moveOn == "yes"):
+##                JAMESONISGO = False
+##                print "Moving on to Abis mods...."
+##            else:
+##                continue
+##                
+##
+####    nextComponent = Component()    
+####    nextComponent.nextComponent("R","9.95k","default",2,4,[0,0,0,0]) #VALUES NEED TO BE CORRECTED
+####    grid.addComponent(nextComponent)
+####
+####    grid.drawGrid()
+##
+##    moveOn = raw_input("Component added...move on to Check? (yes/no): ")
+##    if (moveOn == "yes"):
+##        LETSBUILD = False
+##        print "Moving on to CHECK mode...."
+##    else:
+##        continue
+##
+##
+##LETSCHECK = True
+##while(LETSCHECK):
+##    print "Here will be checking code.....TBD"
+##    moveOn = raw_input("Board has been checked...power on board? (yes/no): ")
+##    if (moveOn=="yes"):
+##        print "Powering on!"
+##        LETSCHECK = False #move on for now...
+##    else:
+##        continue
+##
+### This one switches the Arduino to the Run mode
+##arduino.changeMode(arduinoController.CONSTANTS["MODE_RUN"])
+### This one actually turns the power on and off
+##arduino.runPower(arduinoController.CONSTANTS["SWITCH_ON"])
+##
+##LETSRUN = True
+##count = 0
+##while(LETSRUN):   
+##    railNums = []
+##        for i in contents[1:]:
+##            if (not arduinoController.isInt(i)):
+##                print "Invalid input"
+##                continue
+##            else:
+##                railNums.append(int(i))
+##        ans = arduino.runVoltage(railNums)
+##        for i in ans:
+##            print i, ans[i]
+##
+##        count = count + 1
+##        if (count > 100):
+##            moveOn = raw_input("Board has been checked...power on board? (yes/no): ")
+##                if (moveOn=="yes"):
+##                print "Powering on!"
+##                LETSCHECK = False #move on for now...
+##        else:
+##            continue
 
         #JAMESONS MODULE(s) returns -> type of component, value of component, location of component
         #check output (will need to discuss who will be covering error handling....)    
@@ -468,7 +383,8 @@ while(LETSRUN):
          #return gridmat_secondcomp,nodes_secondcomp
 
 
-
+# Turn the power off
+##arduino.runPower(arduinoController.CONSTANTS["SWITCH_OFF"])
 
 
 
