@@ -205,6 +205,9 @@ while(LETSBUILD):
     JAMESONISGO = True
     while(JAMESONISGO):
 
+        #check if any parallel components
+        testRailCheck = testCase.checkDummy(railOne,railTwo)
+
         lastComponentName = compType #always resistor for now
         railOne = int(railOne) - 1
         railTwo = int(railTwo) - 1
@@ -221,7 +224,7 @@ while(LETSBUILD):
                 # eg. arduino.buildResistor(0, 2, [["resistor", 1000], ["resistor", 5000]])
                 #  Note that if you don't have any other components in parallel then you only have to provide 2 arguments
                 #   since otherComponents will default to [] if nothing is provided
-                compVal= arduino.buildResistor(int(railOne), int(railTwo), otherComponents) #NOTE: railOne and railTwo
+                compVal= arduino.buildResistor(int(railOne), int(railTwo), testRailCheck) #NOTE: railOne and railTwo
             elif (lastComponentName == "capacitor"):
                 otherComponents = []
                 # COMMAND: buildCapacitor(self, rail1, rail2, otherComponents=[])
@@ -290,7 +293,8 @@ while(LETSRUN):
 ##            continue
 ##        else:
 ##            railNums.append(int(i))
-    ans = arduino.runVoltage([railOne,railTwo])
+    railsToMeasure = grid.getRealNodes()
+    ans = arduino.runVoltage(railsToMeasure)
     for i in ans:
         print i, ans[i]
 
@@ -429,6 +433,3 @@ arduino.changeMode(arduinoController.CONSTANTS["MODE_BUILD"])
 
 # Turn the power off
 ##arduino.runPower(arduinoController.CONSTANTS["SWITCH_OFF"])
-
-
-
