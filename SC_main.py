@@ -25,7 +25,7 @@ print "initializing program"
     #TBD
     #setup GUI
 #RUN WITH ARDUINO WORKING?
-elecHardware = False
+elecHardware = True
 photoHardware = True
 
 
@@ -110,7 +110,7 @@ while(LETSCALIBRATE):
 LETSBUILD = True
 while(LETSBUILD):
 
-    LINDSAYISGO = True
+    LINDSAYISGO = False
     while(LINDSAYISGO):
         #load bb points
         bbpoints=pickle.load(open("cam_data/bbpoints.obj","rb"))
@@ -202,15 +202,24 @@ while(LETSBUILD):
         else:
             continue
 
+
+    #manual input
+    
+    
     JAMESONISGO = True
     while(JAMESONISGO):
 
-        #check if any parallel components
-        testRailCheck = testCase.checkDummy(railOne,railTwo)
+        #railOne = raw_input("Rail1: ")
+        #railOne = int(railOne)
+        #railTwo = raw_input("Rail2: ")
+        #railTwo = int(railTwo)
+        #compType = raw_input("Comp type: ")
 
         lastComponentName = compType #always resistor for now
         railOne = int(railOne) - 1
         railTwo = int(railTwo) - 1
+
+        testRailCheck = grid.checkDummy(railOne,railTwo)
 
         if (text == "kill"):
             break
@@ -246,6 +255,13 @@ while(LETSBUILD):
                 print "Error: Unexpected input. Discarding command"
             print compVal
 
+            print "Component is added!"
+            nextComponent = Component()
+            nextComponent.newComponent(compType,str(compVal),"default",railOne,railTwo) #VALUES NEED TO BE CORRECTED
+            grid.addComponent(nextComponent)
+            print grid.getNodes()
+            grid.drawGrid()
+
             moveOn = raw_input("Jamesons modules done...move on to Abis? (yes/no): ")
             if (moveOn == "yes"):
                 JAMESONISGO = False
@@ -254,11 +270,11 @@ while(LETSBUILD):
                 continue
 
 
-    nextComponent = Component()
-    nextComponent.newComponent("R",str(compVal),"default",railOne,railTwo,[0,0,0,0]) #VALUES NEED TO BE CORRECTED
-    grid.addComponent(nextComponent)
+##    nextComponent = Component()
+##    nextComponent.newComponent("R",str(compVal),"default",railOne,railTwo,[0,0,0,0]) #VALUES NEED TO BE CORRECTED
+##    grid.addComponent(nextComponent)
 
-    grid.drawGrid()
+##    grid.drawGrid()
 
     moveOn = raw_input("Component added...move on to Check? (yes/no): ")
     if (moveOn == "yes"):
@@ -300,9 +316,9 @@ while(LETSRUN):
 
     count = count + 1
     if (count > 100):
-        moveOn = raw_input("Board has been checked...power on board? (yes/no): ")
-        if (moveOn=="yes"):
-            print "Powering on!"
+        moveOn = raw_input("Run board again? (yes/no): ")
+        if (moveOn=="no"):
+            print "Powering off!"
             LETSRUN = False #move on for now...
         else:
             continue

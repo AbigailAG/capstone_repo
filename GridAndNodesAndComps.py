@@ -249,16 +249,19 @@ class GridAndNodesAndComps:
 
 
     def checkDummy(self,inRail1,inRail2):
+        print "CHECK DUMMY IS RUNNING"
+        print self.nodes
         dummyRow = [True,[0]*self.n,0,0,0]
         dummyRow[1][int(inRail1)] = 1
         dummyRow[1][int(inRail2)] = 1
 
         listThatMatters, other = self.checkNodes(dummyRow,39) #last number doens't matter so long as it's outside of possible component inventory
+        print "LIST THAT MATTERS: "
         print listThatMatters
         listFormatted = []
         for eachItem in listThatMatters:
             splitString = eachItem.split()
-            stringFormatted = [str(splitString[0]),int(splitString[1])]
+            stringFormatted = [str(splitString[0]),float(splitString[1])]
             listFormatted.append(stringFormatted)
         print listFormatted
         return listFormatted
