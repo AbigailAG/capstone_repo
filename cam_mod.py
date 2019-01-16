@@ -17,8 +17,10 @@ import time
 import argparse
 from pyimagesearch.shapedetector import ShapeDetector
 from scipy.spatial import distance as dist
+from scipy import signal
 from imutils import perspective
 from imutils import contours
+from collections import defaultdict
 
 
 ############## Defining Functions ##############################
@@ -72,6 +74,104 @@ def order_points(pts):
 	# return the coordinates in top-left, top-right,
 	# bottom-right, and bottom-left order
 	return np.array([tl, tr, br, bl], dtype="float32")
+
+def four_point_transform(image,pts):
+        
+	# obtain a consistent order of the points and unpack them
+	# individually
+	rect = order_points(pts)
+	(tl, tr, br, bl) = rect
+ 
+	# compute the width of the new image, which will be the
+	# maximum distance between bottom-right and bottom-left
+	# x-coordiates or the top-right and top-left x-coordinates
+	widthA = np.sqrt(((br[0] - bl[0]) ** 2) + ((br[1] - bl[1]) ** 2))
+	widthB = np.sqrt(((tr[0] - tl[0]) ** 2) + ((tr[1] - tl[1]) ** 2))
+	maxWidth = max(int(widthA), int(widthB))
+ 
+	# compute the height of the new image, which will be the
+	# maximum distance between the top-right and bottom-right
+	# y-coordinates or the top-left and bottom-left y-coordinates
+	heightA = np.sqrt(((tr[0] - br[0]) ** 2) + ((tr[1] - br[1]) ** 2))
+	heightB = np.sqrt(((tl[0] - bl[0]) ** 2) + ((tl[1] - bl[1]) ** 2))
+	maxHeight = max(int(heightA), int(heightB))
+ 
+	# now that we have the dimensions of the new image, construct
+	# the set of destination points to obtain a "birds eye view",
+	# (i.e. top-down view) of the image, again specifying points
+	# in the top-left, top-right, bottom-right, and bottom-left
+	# order
+	dst = np.array([
+		[0, 0],
+		[maxWidth - 1, 0],
+		[maxWidth - 1, maxHeight - 1],
+		[0, maxHeight - 1]], dtype = "float32")
+ 
+	# compute the perspective transform matrix and then apply it
+	M = cv2.getPerspectiveTransform(rect, dst)
+	warped = cv2.warpPerspective(image, M, (maxWidth, maxHeight))
+ 
+	# return the warped image
+	return warped
+
+def segment_by_angle_kmeans(lines, k=2, **kwargs):
+    """Groups lines based on angle with k-means.
+
+    Uses k-means on the coordinates of the angle on the unit circle 
+    to segment `k` angles inside `lines`.
+    """
+
+    # Define criteria = (type, max_iter, epsilon)
+    default_criteria_type = cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER
+    criteria = kwargs.get('criteria', (default_criteria_type, 10, 1.0))
+    flags = kwargs.get('flags', cv2.KMEANS_RANDOM_CENTERS)
+    attempts = kwargs.get('attempts', 10)
+
+    # returns angles in [0, pi] in radians
+    angles = np.array([line[0][1] for line in lines])
+    # multiply the angles by two and find coordinates of that angle
+    pts = np.array([[np.cos(2*angle), np.sin(2*angle)]
+                    for angle in angles], dtype=np.float32)
+
+    # run kmeans on the coords
+    labels, centers = cv2.kmeans(pts, k, None, criteria, attempts, flags)[1:]
+    labels = labels.reshape(-1)  # transpose to row vec
+
+    # segment lines based on their kmeans label
+    segmented = defaultdict(list)
+    for i, line in zip(range(len(lines)), lines):
+        segmented[labels[i]].append(line)
+    segmented = list(segmented.values())
+    return segmented
+def intersection(line1, line2):
+    """Finds the intersection of two lines given in Hesse normal form.
+
+    Returns closest integer pixel locations.
+    See https://stackoverflow.com/a/383527/5087436
+    """
+    rho1, theta1 = line1[0]
+    rho2, theta2 = line2[0]
+    A = np.array([
+        [np.cos(theta1), np.sin(theta1)],
+        [np.cos(theta2), np.sin(theta2)]
+    ])
+    b = np.array([[rho1], [rho2]])
+    x0, y0 = np.linalg.solve(A, b)
+    x0, y0 = int(np.round(x0)), int(np.round(y0))
+    return [[x0, y0]]
+
+
+def segmented_intersections(lines):
+    """Finds the intersections between groups of lines."""
+
+    intersections = []
+    for i, group in enumerate(lines[:-1]):
+        for next_group in lines[i+1:]:
+            for line1 in group:
+                for line2 in next_group:
+                    intersections.append(intersection(line1, line2)) 
+
+    return intersections
 
 
 def calibrate(frame):
@@ -129,26 +229,72 @@ def calibrate(frame):
         cv2.drawContours(hull_img,[hull],-1,(255,255,0),3)
         cv2.imshow("preview",hull_img)
         cv2.waitKey(0)
+        ## houghlines on the hull
+        hough_img=frame.copy()
+        h,w=hough_img.shape[:2]
+        mask=np.zeros((h,w),np.uint8)
+        cv2.drawContours(mask,[hull],-1,(255,255,255),1)
+        cv2.imshow("preview",mask)
+        cv2.waitKey(0)        
+        threshold=100
+        minLinLen=0
+        maxLinGap=0
+        lines=cv2.HoughLines(mask,1,np.pi/180,threshold)
+        for [rho,theta] in lines[:,0,:]:
+            a = np.cos(theta)
+            b = np.sin(theta)
+            x0 = a*rho
+            y0 = b*rho
+            x1 = int(x0 + 1000*(-b))
+            y1 = int(y0 + 1000*(a))
+            x2 = int(x0 - 1000*(-b))
+            y2 = int(y0 - 1000*(a))
+            cv2.line(hough_img,(x1,y1),(x2,y2),(0,0,255),2)
+        cv2.imshow("preview",hough_img)
+        cv2.waitKey(0)
+        segmented = segment_by_angle_kmeans(lines)
+        intersections = segmented_intersections(segmented)
+        int_img=frame.copy()
+        for point in intersections:                
+                cv2.circle(int_img, (int(point[0][0]), int(point[0][1])), 5, (255,255,0), -1)
+        cv2.imshow("preview",int_img)
+        cv2.waitKey(0)
         ## approx the contour
         approx_img=img_rgb.copy()
-        epsilon=0.008*cv2.arcLength(hull,True)
+        epsilon=0.002*cv2.arcLength(hull,True)
         approx=cv2.approxPolyDP(hull,epsilon,True)
+        for point in approx:                
+                cv2.circle(approx_img, (int(point[0][0]), int(point[0][1])), 5, (255,255,0), -1)
         cv2.drawContours(approx_img,[approx],-1,(255,255,0),3)
+        approx=np.array(approx[:,0,:])        
         cv2.imshow("preview",approx_img)
-        cv2.waitKey(0)
+        cv2.waitKey(0)  
         ## get rotated rectangle version of the hull contour                             
         rect=cv2.minAreaRect(approx)
         box = cv2.cv.BoxPoints(rect) if imutils.is_cv2() else cv2.boxPoints(rect)
-        box = np.array(box, dtype="int")                
+        box = np.array(box, dtype="int")
+        cv2.drawContours(approx_img, [box], -1, (0, 0, 255), 2)       
+        cv2.imshow("preview",approx_img)
+        cv2.waitKey(0)
         # compute the rotated bounding box of the contour, then
         # draw the contours
-        order_img=img_rgb.copy()
-        cv2.drawContours(order_img, [box], -1, (0, 255, 0), 2)        
+              
         # order the points in the contour such that they appear
         # in top-left, top-right, bottom-right, and bottom-left
         # order, then draw the outline of the rotated bounding
         # box
         rect = order_points_old(box)
+
+        ## four point transform warped image
+        warped=four_point_transform(frame.copy(),rect)
+        bbpoints=rect
+        cv2.imshow("preview",warped)
+        cv2.waitKey(0)
+        h,w=warped.shape[:2]
+        rect = np.array([[0,0],[w,0],[w,h],[0,h]],dtype="int")
+        rect = order_points_old(rect)
+        frame=warped
+        order_img=frame.copy()
         # check to see if the new method should be used for
         # ordering the coordinates
         ##if args["new"] > 0:
@@ -166,24 +312,15 @@ def calibrate(frame):
         cv2.imshow("preview", order_img)
         cv2.waitKey(0)
         ##  save rectangle points
-        filehandler=open("topLeft.obj","wb")
-        pickle.dump(topLeft,filehandler)
-        filehandler.close()
-        filehandler=open("topRight.obj","wb")
-        pickle.dump(topRight,filehandler)
-        filehandler.close()
-        filehandler=open("botLeft.obj","wb")
-        pickle.dump(botLeft,filehandler)
-        filehandler.close()
-        filehandler=open("botRight.obj","wb")
-        pickle.dump(botRight,filehandler)
+        filehandler=open("cam_data/bbpoints.obj","wb")
+        pickle.dump(bbpoints,filehandler)
         filehandler.close()
         ### Get the regions of the breadboard
         ### region 1
         h = dist.cdist([topLeft],[botLeft], "euclidean")
         htop=dist.cdist([topRight],[topLeft], "euclidean")
         bbot=dist.cdist([botRight],[botLeft], "euclidean")
-        side_w=0.044
+        side_w=0.037
         r1_w=0.16
         r2_w=0.31
         r3_w=r2_w
@@ -214,6 +351,8 @@ def calibrate(frame):
         r1_bl=topLeft-r1_w*h*utl  
         r2_tr=r1_br
         r2_tl=r1_bl
+        lp_l=r1_bl-r2_w*0.5*h*utl
+        lp_r=r1_br-r2_w*0.5*h*utr
         r2_bl=r2_tl-r2_w*h*utl
         r2_br=r2_tr-r2_w*h*utr        
         r5_tr=r2_br
@@ -242,7 +381,7 @@ def calibrate(frame):
         cv2.imshow("preview",img_thing)
         cv2.waitKey(0)
         #calculate each rail
-        numRails=30
+        numRails=31
         r_xt=np.linspace(topLeft[0][0],topRight[0][0],numRails)
         r_yt=np.linspace(topLeft[0][1],topRight[0][1],numRails)
         r_xb=np.linspace(botLeft[0][0],botRight[0][0],numRails)
@@ -283,7 +422,28 @@ def calibrate(frame):
 
             r4_rectMat=[[r4_xt[ind],r4_yt[ind]],[r4_xt[ind+1],r4_yt[ind+1]],[r4_xb[ind+1],r4_yb[ind+1]],[r4_xb[ind],r4_yb[ind]]]
             r4_rails.append(r4_rectMat)
-              
+        #fix the outside rails
+        ind=0
+        A=r2_tl-0.9*side_w*htop*uht
+        B=r2_bl-0.9*side_w*bbot*ubt
+        print A
+        print B
+        print r2_rails[0]
+        r2_rails[0]=[[A[0][0],A[0][1]],[r2_xt[ind+1],r2_yt[ind+1]],[r2_xb[ind+1],r2_yb[ind+1]],[B[0][0],B[0][1]]]
+        A=r2_tr+0.9*side_w*htop*uht
+        B=r2_br+0.9*side_w*bbot*ubt
+        ind=r1_xt.size-1
+        r2_rails[-1]=[[r2_xt[ind-1],r2_yt[ind-1]],[A[0][0],A[0][1]],[B[0][0],B[0][1]],[r2_xb[ind-1],r2_yb[ind-1]]]
+
+        A=r3_tl-0.9*side_w*htop*uht
+        B=r3_bl-0.9*side_w*bbot*ubt
+        ind=0
+        r3_rails[0]=[[A[0][0],A[0][1]],[r3_xt[ind+1],r3_yt[ind+1]],[r3_xb[ind+1],r3_yb[ind+1]],[B[0][0],B[0][1]]]
+        A=r3_tr+0.9*side_w*htop*uht
+        B=r3_br+0.9*side_w*bbot*ubt
+        ind=r1_xt.size-1
+        r3_rails[-1]=[[r3_xt[ind-1],r3_yt[ind-1]],[A[0][0],A[0][1]],[B[0][0],B[0][1]],[r3_xb[ind-1],r3_yb[ind-1]]]
+        
         #draw each rail     
         for ind in xrange(len(r_rails)):
               rect_r=np.array([r_rails[ind]],dtype="int32")
@@ -300,84 +460,84 @@ def calibrate(frame):
         cv2.waitKey(0)   
 
         ## Save rail coordinates
-        filehandler=open("r_rails.obj","wb")
+        filehandler=open("cam_data/r_rails.obj","wb")
         pickle.dump(r_rails,filehandler)
         filehandler.close()
-        filehandler=open("r2_rails.obj","wb")
+        filehandler=open("cam_data/r2_rails.obj","wb")
         pickle.dump(r2_rails,filehandler)
         filehandler.close()
-        filehandler=open("r3_rails.obj","wb")
+        filehandler=open("cam_data/r3_rails.obj","wb")
         pickle.dump(r3_rails,filehandler)
         filehandler.close()
         ## Save region coordinates
-        filehandler=open("topLeft.obj","wb")
+        filehandler=open("cam_data/topLeft.obj","wb")
         pickle.dump(topLeft,filehandler)
         filehandler.close()
-        filehandler=open("topRight.obj","wb")
+        filehandler=open("cam_data/topRight.obj","wb")
         pickle.dump(topRight,filehandler)
         filehandler.close()
-        filehandler=open("botLeft.obj","wb")
+        filehandler=open("cam_data/botLeft.obj","wb")
         pickle.dump(botLeft,filehandler)
         filehandler.close()
-        filehandler=open("botRight.obj","wb")
+        filehandler=open("cam_data/botRight.obj","wb")
         pickle.dump(botRight,filehandler)
         filehandler.close()
-        filehandler=open("r5_br.obj","wb")
+        filehandler=open("cam_data/r5_br.obj","wb")
         pickle.dump(r5_br,filehandler)
         filehandler.close()
-        filehandler=open("r5_bl.obj","wb")
+        filehandler=open("cam_data/r5_bl.obj","wb")
         pickle.dump(r5_bl,filehandler)
         filehandler.close()
-        filehandler=open("r5_tr.obj","wb")
+        filehandler=open("cam_data/r5_tr.obj","wb")
         pickle.dump(r5_tr,filehandler)
         filehandler.close()
-        filehandler=open("r5_tl.obj","wb")
+        filehandler=open("cam_data/r5_tl.obj","wb")
         pickle.dump(r5_tl,filehandler)
         filehandler.close()
 
-        filehandler=open("r4_br.obj","wb")
+        filehandler=open("cam_data/r4_br.obj","wb")
         pickle.dump(r4_br,filehandler)
         filehandler.close()
-        filehandler=open("r4_bl.obj","wb")
+        filehandler=open("cam_data/r4_bl.obj","wb")
         pickle.dump(r4_bl,filehandler)
         filehandler.close()
-        filehandler=open("r4_tr.obj","wb")
+        filehandler=open("cam_data/r4_tr.obj","wb")
         pickle.dump(r4_tr,filehandler)
         filehandler.close()
-        filehandler=open("r4_tl.obj","wb")
+        filehandler=open("cam_data/r4_tl.obj","wb")
         pickle.dump(r4_tl,filehandler)
         filehandler.close()
 
-        filehandler=open("r3_br.obj","wb")
+        filehandler=open("cam_data/r3_br.obj","wb")
         pickle.dump(r3_br,filehandler)
         filehandler.close()
-        filehandler=open("r3_bl.obj","wb")
+        filehandler=open("cam_data/r3_bl.obj","wb")
         pickle.dump(r3_bl,filehandler)
         filehandler.close()
-        filehandler=open("r3_tr.obj","wb")
+        filehandler=open("cam_data/r3_tr.obj","wb")
         pickle.dump(r3_tr,filehandler)
         filehandler.close()
-        filehandler=open("r3_tl.obj","wb")
+        filehandler=open("cam_data/r3_tl.obj","wb")
         pickle.dump(r3_tl,filehandler)
         filehandler.close()
 
-        filehandler=open("r2_br.obj","wb")
+        filehandler=open("cam_data/r2_br.obj","wb")
         pickle.dump(r2_br,filehandler)
         filehandler.close()
-        filehandler=open("r2_bl.obj","wb")
+        filehandler=open("cam_data/r2_bl.obj","wb")
         pickle.dump(r2_bl,filehandler)
         filehandler.close()
-        filehandler=open("r2_tr.obj","wb")
+        filehandler=open("cam_data/r2_tr.obj","wb")
         pickle.dump(r2_tr,filehandler)
         filehandler.close()
-        filehandler=open("r2_tl.obj","wb")
+        filehandler=open("cam_data/r2_tl.obj","wb")
         pickle.dump(r2_tl,filehandler)
         filehandler.close()
 
-        filehandler=open("r1_br.obj","wb")
+        filehandler=open("cam_data/r1_br.obj","wb")
         pickle.dump(r1_br,filehandler)
         filehandler.close()
-        filehandler=open("r1_bl.obj","wb")
+        filehandler=open("cam_data/r1_bl.obj","wb")
         pickle.dump(r1_bl,filehandler)
         filehandler.close()
 
@@ -385,7 +545,7 @@ def calibrate(frame):
         cv2.destroyAllWindows()
 
 
-def componentDetect(frame, resTemp, capTemp,icTemp,ledTemp):
+def componentDetect(frame, resTemp, capTemp,icTemp,ledTemp,my_path):
         ### Detect Components in frame
                 cv2.destroyAllWindows()
                 resMat=[]
@@ -399,8 +559,8 @@ def componentDetect(frame, resTemp, capTemp,icTemp,ledTemp):
                 src_img = np.copy(frame)
                 img_gray = cv2.cvtColor(src_img, cv2.COLOR_BGR2GRAY)
                 ## Check if resistors
-                for templateFile in os.listdir(resTemp):
-                    tempName= os.path.join(resTemp, templateFile)
+                for templateFile in os.listdir(os.path.join(my_path,resTemp)):
+                    tempName= os.path.join(my_path,resTemp, templateFile)
                     tempName=os.path.join(tempName)
                     template = cv2.imread(tempName)
                     c,w, h  = template.shape[::-1]
@@ -419,8 +579,8 @@ def componentDetect(frame, resTemp, capTemp,icTemp,ledTemp):
                 cv2.destroyAllWindows()
                 ## Check if caps
                 src_img = np.copy(src_img)
-                for templateFile in os.listdir(capTemp):        
-                    tempName= os.path.join(capTemp, templateFile)
+                for templateFile in os.listdir(os.path.join(my_path,capTemp)):        
+                    tempName= os.path.join(my_path,capTemp, templateFile)
                     template = cv2.imread(tempName)
                     c,w, h = template.shape[::-1]
                     res = cv2.matchTemplate(src_img,template,cv2.TM_CCOEFF_NORMED)
@@ -437,8 +597,8 @@ def componentDetect(frame, resTemp, capTemp,icTemp,ledTemp):
                 cv2.waitKey(0)
                 cv2.destroyAllWindows()                
                 ## Check if LEDs
-                for templateFile in os.listdir(ledTemp):
-                    tempName= os.path.join(ledTemp, templateFile)
+                for templateFile in os.listdir(os.path.join(my_path,ledTemp)):
+                    tempName= os.path.join(my_path,ledTemp, templateFile)
                     tempName=os.path.join(tempName)
                     template = cv2.imread(tempName)
                     c,w, h  = template.shape[::-1]
@@ -456,8 +616,8 @@ def componentDetect(frame, resTemp, capTemp,icTemp,ledTemp):
                 cv2.waitKey(0)
                 cv2.destroyAllWindows()
                 ## Check if ICs
-                for templateFile in os.listdir(icTemp):
-                    tempName= os.path.join(icTemp, templateFile)
+                for templateFile in os.listdir(os.path.join(my_path,icTemp)):
+                    tempName= os.path.join(my_path,icTemp, templateFile)
                     tempName=os.path.join(tempName)
                     template = cv2.imread(tempName)
                     c,w, h  = template.shape[::-1]
@@ -479,175 +639,265 @@ def componentDetect(frame, resTemp, capTemp,icTemp,ledTemp):
                 return componentName
 
 def componentLocate(fgmask,frame, resCount,capCount,ledCount,icCount):
-        ############# LOCATION FIND ######################
-                if capCount+resCount+ledCount+icCount>0:
-                    if icCount>0:
-                        xrailMat=[]
-                        yrailMat=[]
-                        ic=icMat[2]
-                        xrailMat.append(ic[0][0])
-                        xrailMat.append(ic[1][0])
-                        yrailMat.append(ic[0][1])
-                        yrailMat.append(ic[1][1])
-                    else:
-                        xrailMat=[]
-                        yrailMat=[]
-                        img=np.copy(fgmask)
-                        cv2.imshow("preview",img)
-                        cv2.waitKey(0)
-                        kernel_size = 5
-                        blur_gray = cv2.GaussianBlur(img,(kernel_size, kernel_size),0)
-                        cv2.imshow("preview",blur_gray)
-                        cv2.waitKey(0)
-                        low_threshold = 50  ##50
-                        high_threshold = 150 ##240
-                        edges = cv2.Canny(blur_gray, low_threshold, high_threshold,None,3)
-                        cv2.imshow("preview",edges)
-                        cv2.waitKey(0)
-                        # Copy edges to the images that will display the results in BGR         
-                        rho = cv2.HOUGH_PROBABILISTIC  # distance resolution in pixels of the Hough grid
-                        theta = np.pi / 180  # angular resolution in radians of the Hough grid
-                        threshold = 25                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     # minimum number of votes (intersections in Hough grid cell)
-                        min_line_length = 1  # minimum number of pixels making up a line
-                        max_line_gap = 30  # maximum gap in pixels between connectable line segments
-                        line_image = np.copy(frame) * 0  # creating a blank to draw lines on
-                        ##lines = cv2.HoughLines(edges, 1, np.pi / 180, 30, None, 0, 0) ##standard
-                        img_rgb=frame.copy()
-                        lines = cv2.HoughLinesP(edges, cv2.HOUGH_PROBABILISTIC, theta, threshold, np.array([]),min_line_length, max_line_gap)
-                        if lines is not None:
-                            for line in lines:
-                                for x1,y1,x2,y2 in line:
-                                    cv2.line(line_image,(x1,y1),(x2,y2),(255,0,0),5)
-                                    ##cv2.circle(line_image,(x1,y1),10,(0,255,0),3)
-                                    ##cv2.circle(line_image,(x2,y2),10,(0,0,255),3)
-                                    xrailMat.append(x1)
-                                    xrailMat.append(x2)
-                                    yrailMat.append(y1)
-                                    yrailMat.append(y2)
-                    ##            # Draw the lines on the  image    
-                            ##img_rgb=cv2.imread(rgbPath)
-                            lines_edges = cv2.addWeighted(img_rgb, 0.8, line_image, 1, 0)
-                            cv2.imshow("preview",lines_edges)
-                            cv2.waitKey(0)
+############# LOCATION FIND ######################
+    if capCount+resCount+ledCount+icCount>0:
+        if icCount>0:
+            xrailMat=[]
+            yrailMat=[]
+            ic=icMat[2]
+            xrailMat.append(ic[0][0])
+            xrailMat.append(ic[1][0])
+            yrailMat.append(ic[0][1])
+            yrailMat.append(ic[1][1])
+        else:
+            xrailMat=[]
+            yrailMat=[]
+            img=np. copy(fgmask)
+##            cv2.imshow("preview",img)
+##            cv2.waitKey(0)
+            kernel_size = 5
+            blur_gray = cv2.GaussianBlur(img,(kernel_size, kernel_size),0)
+##            cv2.imshow("preview",blur_gray)
+##            cv2.waitKey(0)
+            low_threshold = 50  ##50
+            high_threshold = 150 ##240
+            edges = cv2.Canny(blur_gray, low_threshold, high_threshold,None,3)
+##            cv2.imshow("preview",edges)
+##            cv2.waitKey(0)
+            # Copy edges to the images that will display the results in BGR         
+            rho = cv2.HOUGH_PROBABILISTIC  # distance resolution in pixels of the Hough grid
+            theta = np.pi / 180  # angular resolution in radians of the Hough grid
+            threshold = 25                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     # minimum number of votes (intersections in Hough grid cell)
+            min_line_length = 1  # minimum number of pixels making up a line
+            max_line_gap = 30  # maximum gap in pixels between connectable line segments
+            line_image = np.copy(frame) * 0  # creating a blank to draw lines on
+            ##lines = cv2.HoughLines(edges, 1, np.pi / 180, 30, None, 0, 0) ##standard
+            img_rgb=frame.copy()
+            lines = cv2.HoughLinesP(edges, cv2.HOUGH_PROBABILISTIC, theta, threshold, np.array([]),min_line_length, max_line_gap)
+            if lines is not None:
+                for line in lines:
+                    for x1,y1,x2,y2 in line:
+                        cv2.line(line_image,(x1,y1),(x2,y2),(255,0,0),5)
+                        ##cv2.circle(line_image,(x1,y1),10,(0,255,0),3)
+                        ##cv2.circle(line_image,(x2,y2),10,(0,0,255),3)
+                        xrailMat.append(x1)
+                        xrailMat.append(x2)
+                        yrailMat.append(y1)
+                        yrailMat.append(y2)
+        ##            # Draw the lines on the  image    
+                ##img_rgb=cv2.imread(rgbPath)
+                lines_edges = cv2.addWeighted(img_rgb, 0.8, line_image, 1, 0)
+##                cv2.imshow("preview",lines_edges)
+##                cv2.waitKey(0)
 
-                    ## Get contours of the image
-                    #################################
-                    #################################
-                    #################################
-                    ## make bgr image gray
-                    img=fgmask.copy()
-                    #gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-                    kernel_size = 5
-                    ## blur the gray image
-                    blur_gray = cv2.GaussianBlur(img,(kernel_size, kernel_size),0)
-                    cv2.imshow("preview",blur_gray)
-                    cv2.waitKey(0)
-                    ## create binary image
-                    ret, thresh = cv2.threshold(blur_gray, 80,255, cv2.THRESH_BINARY)
-                    cv2.imshow("preview",thresh)
-                    cv2.waitKey(0)
-                    ## erode and dilate the threshed image to remove noise
-                    ##thresh=cv2.erode(thresh, None, iterations=2)
-                    ##cv2.imshow("preview",thresh)
-                    ##cv2.waitKey(0)
-                    thresh=cv2.dilate(thresh, None, iterations=2)
-                    cv2.imshow("preview",thresh)
-                    cv2.waitKey(0)
-                    ## create canny edge image
-                    low_threshold = 90  
-                    high_threshold =250 
-                    edges = cv2.Canny(thresh, low_threshold, high_threshold,None,3)
-                    cv2.imshow("preview",edges)
-                    edgesCopy=edges.copy()
-                    cv2.waitKey(0)
+        ## Get contours of the image
+        #################################
+        #################################
+        #################################
+        ## make bgr image gray
+        img=fgmask.copy()
+        #gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        kernel_size = 5
+        ## blur the gray image
+        blur_gray = cv2.GaussianBlur(img,(kernel_size, kernel_size),0)
+##        cv2.imshow("preview",blur_gray)
+##        cv2.waitKey(0)
+        ## create binary image
+        ret, thresh = cv2.threshold(blur_gray, 80,255, cv2.THRESH_BINARY)
+##        cv2.imshow("preview",thresh)
+##        cv2.waitKey(0)
+        thresh_orig=img.copy()
+        ## erode and dilate the threshed image to remove noise
+        ##thresh=cv2.erode(thresh, None, iterations=2)
+        ##cv2.imshow("preview",thresh)
+        ##cv2.waitKey(0)
+        thresh=cv2.dilate(thresh, None, iterations=2)
+##        cv2.imshow("preview",thresh)
+##        cv2.waitKey(0)
+        ## create canny edge image
+        low_threshold = 90  
+        high_threshold =250 
+        edges = cv2.Canny(thresh, low_threshold, high_threshold,None,3)
+##        cv2.imshow("preview",edges)
+        edgesCopy=edges.copy()
+##        cv2.waitKey(0)
 
-                    ##h,w=img_rgb.shape[:2]
-                    ##mask=np.zeros((h+2,w+2),np.uint8)
+        ##h,w=img_rgb.shape[:2]
+        ##mask=np.zeros((h+2,w+2),np.uint8)
 
-                    ## morph closing of the edges
-                    kernel=np.ones((5,5),np.uint8)
-                    closing = cv2.morphologyEx(edges,cv2.MORPH_CLOSE, kernel)
-                    cv2.imshow("preview",closing)
-                    cv2.waitKey(0)
+        ## morph closing of the edges
+        kernel=np.ones((5,5),np.uint8)
+        closing = cv2.morphologyEx(edges,cv2.MORPH_CLOSE, kernel)
+##        cv2.imshow("preview",closing)
+##        cv2.waitKey(0)
 
-                    ## get contours of morph closed edges
-                    h,w=edges.shape[:2]
-                    mask=np.zeros((h+2,w+2),np.uint8)
-                    ##im,contours,hierarchy = cv2.findContours(closing, cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
+        ## get contours of morph closed edges
+        h,w=edges.shape[:2]
+        mask=np.zeros((h+2,w+2),np.uint8)
+        ##im,contours,hierarchy = cv2.findContours(closing, cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
 
-                    ## sort the contours from left-to-right and initiaize the bounding box
-                    ## point colors
-                    cnts = cv2.findContours(closing.copy(), cv2.RETR_EXTERNAL,
-                            cv2.CHAIN_APPROX_NONE)
-                    cnts=imutils.grab_contours(cnts)
-                    ## find the contour with the biggest area
-                    c=max(cnts,key=cv2.contourArea)
-                    epsilon=0.1*cv2.arcLength(c,True)
-                    ##(cnts, _) = contours.sort_contours(cnts)
-                    ##colors = ((0, 0, 255), (240, 0, 159), (255, 0, 0), (255, 255, 0))
+        ## sort the contours from left-to-right and initiaize the bounding box
+        ## point colors
+        cnts = cv2.findContours(closing.copy(), cv2.RETR_EXTERNAL,
+                cv2.CHAIN_APPROX_NONE)
+        cnts=imutils.grab_contours(cnts)
+        ## find the contour with the biggest area
+        if len(cnts)>0:
+            c=max(cnts,key=cv2.contourArea)
+            epsilon=0.1*cv2.arcLength(c,True)
+        else:
+            print "error no contours found"
+            return none
+        ##(cnts, _) = contours.sort_contours(cnts)
+        ##colors = ((0, 0, 255), (240, 0, 159), (255, 0, 0), (255, 255, 0))
 
-                    ## determine the most extreme points along the contour
-                    extLeft = tuple(c[c[:, :, 0].argmin()][0])
-                    extRight = tuple(c[c[:, :, 0].argmax()][0])
-                    extTop = tuple(c[c[:, :, 1].argmin()][0])
-                    extBot = tuple(c[c[:, :, 1].argmax()][0])
-                    ext_img=frame.copy()
-                    cv2.drawContours(ext_img,[c],-1,(0,255,255),2)
-                    cv2.circle(ext_img,extLeft,8, (0, 0, 255), -1)
-                    cv2.circle(ext_img,extRight,8, (0, 255,0), -1)
-                    cv2.circle(ext_img,extTop,8, (255, 0, 0), -1)
-                    cv2.circle(ext_img,extBot,8, (255, 255,0 ), -1)
-                    cv2.imshow("preview",ext_img)
-                    cv2.waitKey(0)                  
+        ## determine the most extreme points along the contour
+        extLeft = tuple(c[c[:, :, 0].argmin()][0])
+        extRight = tuple(c[c[:, :, 0].argmax()][0])
+        extTop = tuple(c[c[:, :, 1].argmin()][0])
+        extBot = tuple(c[c[:, :, 1].argmax()][0])
+        ext_img=frame.copy()
+        cv2.drawContours(ext_img,[c],-1,(0,255,255),2)
+        cv2.circle(ext_img,extLeft,8, (0, 0, 255), -1)
+        cv2.circle(ext_img,extRight,8, (0, 255,0), -1)
+        cv2.circle(ext_img,extTop,8, (255, 0, 0), -1)
+        cv2.circle(ext_img,extBot,8, (255, 255,0 ), -1)
+##        cv2.imshow("preview",ext_img)
+##        cv2.waitKey(0)                  
 
-                    ## approx the contour
-                    approx_img=frame.copy()
-                    approx=cv2.approxPolyDP(c,epsilon,True)
-                    cv2.drawContours(approx_img,[approx],-1,(255,255,0),3)
-                    cv2.imshow("preview",approx_img)
-                    cv2.waitKey(0)
-                    ## convex hull the contour
-                    hull = cv2.convexHull(c)
-                    hull_img=frame.copy()
-                    cv2.drawContours(hull_img,[hull],-1,(255,255,0),3)
-                    cv2.imshow("preview",hull_img)
-                    cv2.waitKey(0)
+        ## approx the contour
+        approx_img=frame.copy()
+        approx=cv2.approxPolyDP(c,epsilon,True)
+        cv2.drawContours(approx_img,[approx],-1,(255,255,0),3)
+##        cv2.imshow("preview",approx_img)
+##        cv2.waitKey(0)
+        cr_c=approx
+        ## convex hull the contour
+        hull = cv2.convexHull(c)
+        hull_img=frame.copy()
+        cv2.drawContours(hull_img,[hull],-1,(255,255,0),3)
+##        cv2.imshow("preview",hull_img)
+##        cv2.waitKey(0)
 
-                     ######################
-                    #########################
-                    ######################
-                    ################
+         ######################
+        #########################
+        ######################
+        ################
 
-                    ## railLocate
-                    rail1,rail2=railLocate(hull,img_rgb,thresh)
-                    return rail1, rail2
+        ## railLocate
+        rail1,rail2=railLocate(hull,img_rgb,thresh_orig)
+        return rail1, rail2
                 
                     
                     
-
-##                                            
-##
-##                    
-##                    yMin=np.min(yrailMat)
-##                    yMax=np.max(yrailMat)
-##                    xMin=np.min(xrailMat)
-##                    xMax=np.max(xrailMat)
-##                    ydist=yMax-yMin
-##                    xdist=xMax-xMin
-##                    if xdist > 1.5*ydist:  ## horizontal
-##                            yavg=0.5*ydist+yMin
-##                            rail1=railLocate(numRails,xMin,int(np.ceil(yavg)),img_rgb)
-##                            rail2=railLocate(numRails,xMax,int(np.ceil(yavg)),img_rgb)
-##                    elif ydist > 1.5*xdist: ## vertical
-##                            xavg=0.5*xdist+xMin
-##                            rail1=railLocate(numRails,int(np.ceil(xavg)),yMin,img_rgb)
-##                            rail2=railLocate(numRails,int(np.ceil(xavg)),yMax,img_rgb)
-##                    else:  ##angled
-##                            yavg=0.5*ydist+yMin
-##                            rail1=railLocate(numRails,xMin,int(np.ceil(yavg)),img_rgb)
-##                            rail2=railLocate(numRails,xMax,int(np.ceil(yavg)),img_rgb)                    
-                    #print rail1,rail2
-                    #return rail1,rail2
+def cross_rails(c_hull,img_rgb,thresh_img,minr3,maxr3,minr2,maxr2):
+    thresh=thresh_img.copy()
+    img=img_rgb.copy()
+    cnts = cv2.findContours(thresh, cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_NONE)
+    cnts=imutils.grab_contours(cnts)
+    if len(cnts)>0:                
+        c=max(cnts,key=cv2.contourArea)
+    else:
+        print "no contours found, using hull"
+        c=c_hull
+    if cv2.contourArea(c)<=0.6*cv2.contourArea(c_hull):
+        c=c_hull
+        print "incorrect contour area, using hull"
+##    minInd=np.argmin(c, axis=0)
+##    print minInd
+##    maxInd=np.argmax(c,axis=0)
+##    print maxInd
+    
+    r2_rails=pickle.load(open("cam_data/r2_rails.obj","rb"))
+    r3_rails=pickle.load(open("cam_data/r3_rails.obj","rb"))
+    r2_rail_check=np.zeros((len(r2_rails),1))
+    r3_rail_check=np.zeros((len(r3_rails),1))
+    minInd = np.argmin(c, axis=0)    
+    print minInd[0,1]
+    minInd=minInd[0,1]
+    maxInd = np.argmax(c, axis=0)
+    print maxInd[0,1]
+    maxInd=maxInd[0,1]
+    print minInd
+    print maxInd
+    
+    minmat=c[minInd]    
+    maxmat=c[maxInd]
+    print minmat[0][1]
+    print maxmat[0][1]
+    cv2.circle(img, (int(minmat[0][0]), int(minmat[0][1])), 5, (255,255,0), -1)
+    cv2.circle(img, (int(maxmat[0][0]), int(maxmat[0][1])), 5, (255,255,0), -1)    
+    cv2.imshow("preview",img)
+    cv2.waitKey(0)
+    for ind1 in xrange(len(r2_rails)): 
+        #region2
+        check_rail2=check(r2_rails[ind1][0][0],r2_rails[ind1][0][1],r2_rails[ind1][2][0],r2_rails[ind1][2][1],int(minmat[0][0]),int(minmat[0][1]))
+        if check_rail2==1:
+##            print "match2"
+            r2_rail_check[ind1]=r2_rail_check[ind1]+1
+                
+        #region3
+        check_rail3=check(r3_rails[ind1][0][0],r3_rails[ind1][0][1],r3_rails[ind1][2][0],r3_rails[ind1][2][1],int(maxmat[0][0]),int(maxmat[0][1]))
+        if check_rail3==1:
+##            print "match3"
+            r3_rail_check[ind1]=r3_rail_check[ind1]+1
+            
+    rail1= np.nonzero(r3_rail_check)
+    rail2= np.nonzero(r2_rail_check)
+    if max(r3_rail_check)==0:
+        print "no matches found in region3, using area method"
+        rail1=((maxr3+ minr3)/2)-1
+    elif max(r2_rail_check)==0:
+        print "no matches found in region3, using area method"
+        rail2=((maxr2+ minr2)/2)-1
+##    print rail1
+##    print rail1[0]
+##    print len(rail1)
+##    print len(rail2)
+##    print tuple(rail1)
+##    print tuple(rail1[0])
+##    print int(rail1[0])
+##    print rail2
+    if len(rail1)>0:
+        #rail1=tuple(np.array(np.nonzero(r3_rail_check),dtype="int").flatten())
+        rail1=int(rail1[0])
+    else:
+        rail1=0
+        print "unknown error rail1"
+    if len(rail2)>0:
+        #rail2=tuple(np.array(np.nonzero(r2_rail_check),dtype="int").flatten())
+        rail2=int(rail2[0])
+    else:
+        rail2=0
+        print "unknown error rail2"
+    print "rail1:",rail1
+    print "rail2:", rail2
+    rail1=30-rail1
+    rail2=60-rail2
+    return rail1,rail2
+        
+                    
+    
+##    yMin=np.min(yrailMat)
+##    yMax=np.max(yrailMat)
+##    xMin=np.min(xrailMat)
+##    xMax=np.max(xrailMat)
+##    ydist=yMax-yMin
+##    xdist=xMax-xMin
+##    if xdist > 1.5*ydist:  ## horizontal
+##            yavg=0.5*ydist+yMin
+##            rail1=railLocate(numRails,xMin,int(np.ceil(yavg)),img_rgb)
+##            rail2=railLocate(numRails,xMax,int(np.ceil(yavg)),img_rgb)
+##    elif ydist > 1.5*xdist: ## vertical
+##            xavg=0.5*xdist+xMin
+##            rail1=railLocate(numRails,int(np.ceil(xavg)),yMin,img_rgb)
+##            rail2=railLocate(numRails,int(np.ceil(xavg)),yMax,img_rgb)
+##    else:  ##angled
+##            yavg=0.5*ydist+yMin
+##            rail1=railLocate(numRails,xMin,int(np.ceil(yavg)),img_rgb)
+##            rail2=railLocate(numRails,xMax,int(np.ceil(yavg)),img_rgb)                    
+    #print rail1,rail2
+    #return rail1,rail2
                     
 
 
@@ -655,36 +905,36 @@ def snapshot(str,rval,frame):
     import cv2    
     cv2.imwrite(str,frame)    
     return
+        
                 
-def railLocate(c,img_rgb,thresh_img):
-                 
+def railLocate(c,img_rgb,thresh_img):               
 
         #load the region coords
-        topLeft=np.array(pickle.load(open("topLeft.obj","rb"))).flatten()
-        topRight=np.array(pickle.load(open("topRight.obj","rb"))).flatten()
-        botLeft=np.array(pickle.load(open("botLeft.obj","rb"))).flatten()
-        botRight=np.array(pickle.load(open("botRight.obj","rb"))).flatten()
-        r1_bl=np.array(pickle.load(open("r1_bl.obj","rb"))).flatten()
-        r1_br=np.array(pickle.load(open("r1_br.obj","rb"))).flatten()
-        r2_bl=np.array(pickle.load(open("r2_bl.obj","rb"))).flatten()
-        r2_br=np.array(pickle.load(open("r2_br.obj","rb"))).flatten()
-        r2_tl=np.array(pickle.load(open("r2_tl.obj","rb"))).flatten()
-        r2_tr=np.array(pickle.load(open("r2_tr.obj","rb"))).flatten()
-        r3_bl=np.array(pickle.load(open("r3_bl.obj","rb"))).flatten()
-        r3_br=np.array(pickle.load(open("r3_br.obj","rb"))).flatten()
-        r3_tl=np.array(pickle.load(open("r3_tl.obj","rb"))).flatten()
-        r3_tr=np.array(pickle.load(open("r3_tr.obj","rb"))).flatten()
-        r4_bl=np.array(pickle.load(open("r4_bl.obj","rb"))).flatten()
-        r4_br=np.array(pickle.load(open("r4_br.obj","rb"))).flatten()
-        r4_tl=np.array(pickle.load(open("r4_tl.obj","rb"))).flatten()
-        r4_tr=np.array(pickle.load(open("r4_tr.obj","rb"))).flatten()
-        r5_bl=np.array(pickle.load(open("r5_bl.obj","rb"))).flatten()
-        r5_br=np.array(pickle.load(open("r5_br.obj","rb"))).flatten()
-        r5_tl=np.array(pickle.load(open("r5_tl.obj","rb"))).flatten()
-        r5_tr=np.array(pickle.load(open("r5_tr.obj","rb"))).flatten()
+        topLeft=np.array(pickle.load(open("cam_data/topLeft.obj","rb"))).flatten()
+        topRight=np.array(pickle.load(open("cam_data/topRight.obj","rb"))).flatten()
+        botLeft=np.array(pickle.load(open("cam_data/botLeft.obj","rb"))).flatten()
+        botRight=np.array(pickle.load(open("cam_data/botRight.obj","rb"))).flatten()
+        r1_bl=np.array(pickle.load(open("cam_data/r1_bl.obj","rb"))).flatten()
+        r1_br=np.array(pickle.load(open("cam_data/r1_br.obj","rb"))).flatten()
+        r2_bl=np.array(pickle.load(open("cam_data/r2_bl.obj","rb"))).flatten()
+        r2_br=np.array(pickle.load(open("cam_data/r2_br.obj","rb"))).flatten()
+        r2_tl=np.array(pickle.load(open("cam_data/r2_tl.obj","rb"))).flatten()
+        r2_tr=np.array(pickle.load(open("cam_data/r2_tr.obj","rb"))).flatten()
+        r3_bl=np.array(pickle.load(open("cam_data/r3_bl.obj","rb"))).flatten()
+        r3_br=np.array(pickle.load(open("cam_data/r3_br.obj","rb"))).flatten()
+        r3_tl=np.array(pickle.load(open("cam_data/r3_tl.obj","rb"))).flatten()
+        r3_tr=np.array(pickle.load(open("cam_data/r3_tr.obj","rb"))).flatten()
+        r4_bl=np.array(pickle.load(open("cam_data/r4_bl.obj","rb"))).flatten()
+        r4_br=np.array(pickle.load(open("cam_data/r4_br.obj","rb"))).flatten()
+        r4_tl=np.array(pickle.load(open("cam_data/r4_tl.obj","rb"))).flatten()
+        r4_tr=np.array(pickle.load(open("cam_data/r4_tr.obj","rb"))).flatten()
+        r5_bl=np.array(pickle.load(open("cam_data/r5_bl.obj","rb"))).flatten()
+        r5_br=np.array(pickle.load(open("cam_data/r5_br.obj","rb"))).flatten()
+        r5_tl=np.array(pickle.load(open("cam_data/r5_tl.obj","rb"))).flatten()
+        r5_tr=np.array(pickle.load(open("cam_data/r5_tr.obj","rb"))).flatten()
 
-        r2_rails=pickle.load(open("r2_rails.obj","rb"))
-        r3_rails=pickle.load(open("r3_rails.obj","rb"))
+        r2_rails=pickle.load(open("cam_data/r2_rails.obj","rb"))
+        r3_rails=pickle.load(open("cam_data/r3_rails.obj","rb"))
 
         r2_rail_check=np.zeros((len(r2_rails),1))
         r3_rail_check=np.zeros((len(r3_rails),1))
@@ -701,6 +951,7 @@ def railLocate(c,img_rgb,thresh_img):
                 if check_rail3==1:
                     #print "match3"
                     r3_rail_check[ind1]=r3_rail_check[ind1]+1
+            
                 
 
         ## intersect area method        
@@ -725,8 +976,8 @@ def railLocate(c,img_rgb,thresh_img):
                 h,w=cnt_img.shape[:2]
                 mask=np.zeros((h,w),np.uint8)
                 cv2.drawContours(mask,[c_rail],-1,(255,255,0),3)
-                cv2.imshow("preview",mask)
-                cv2.waitKey(0)
+##                cv2.imshow("preview",mask)
+##                cv2.waitKey(0)
                 area=cv2.contourArea(c_rail)
                 r2_rail_check[ind1]=r2_rail_check[ind1]+area
             
@@ -748,92 +999,50 @@ def railLocate(c,img_rgb,thresh_img):
                 h,w=cnt_img.shape[:2]
                 mask=np.zeros((h,w),np.uint8)
                 cv2.drawContours(mask,[c_rail],-1,(255,255,0),3)
-                cv2.imshow("preview",mask)
-                cv2.waitKey(0)
+##                cv2.imshow("preview",mask)
+##                cv2.waitKey(0)
                 area=cv2.contourArea(c_rail)
                 r3_rail_check[ind1]=r3_rail_check[ind1]+area
             
         #analyze the rail check
         r2_ind=tuple(r2_rail_check.nonzero()[0])
         r3_ind=tuple(r3_rail_check.nonzero()[0])
-        if (len(r2_ind)>0) and (len(r3_ind)==0):            
-            return 30-(max(r2_ind)+1)+8, 30-(min(r2_ind)+1)+8
-            #print 30-(min(r2_ind)+1), 30-(max(r2_ind)+1)
-        elif (len(r3_ind)>0) and (len(r2_ind)==0):
-            return 30-(max(r3_ind)+1), 30-(min(r3_ind)+1)
-            #print 30-(min(r3_ind)+1), 30-(max(r3_ind)+1)
-        elif (len(r3_ind)>0) and (len(r2_ind)>0):
-            minr3=min(r3_ind)+1
+        numRails=31 # number of rails plus one
+              
+        if (len(r2_ind)>0) and (len(r3_ind)==0):
             minr2=min(r2_ind)+1
+            maxr2=max(r2_ind)+1 
+            return (61-maxr2), (61-minr2)            
+        elif (len(r3_ind)>0) and (len(r2_ind)==0):
+            minr3=min(r3_ind)+1
             maxr3=max(r3_ind)+1
+            return (31-maxr3), (31-minr3)            
+        elif (len(r3_ind)>0) and (len(r2_ind)>0):
+            print "cross rails"
+            minr3=min(r3_ind)+1
+            maxr3=max(r3_ind)+1
+            minr2=min(r2_ind)+1
             maxr2=max(r2_ind)+1
-            if minr2<=minr3:
-                rail1=30-minr2+8+1
-            else:
-                rail1=30-minr3+1
-            if maxr2>=maxr3:
-                rail2=30-maxr2+8+1
-            else:
-                rail2=30-maxr3+1
-            
+            rail1,rail2=cross_rails(c,img_rgb,thresh_img,minr3,maxr3,minr2,maxr2)
             return rail1,rail2
-            #print 30-(min(r3_ind)+1), 30-(max(r3_ind)+1)
+##            minr3=min(r3_ind)+1
+##            minr2=min(r2_ind)+1
+##            maxr3=max(r3_ind)+1
+##            maxr2=max(r2_ind)+1 
+##            if minr2<=minr3:
+##                rail1=61-minr2                
+##            else:
+##                rail1=31-minr3
+##            if maxr2>=maxr3:
+##                rail2=61-maxr2
+##            else:
+##                rail2=31-maxr3
+##            
+##            return rail1,rail2            
         else:
-            return 0,0
-            #print 0,0
-        
+            return 1,1
             
-            
-
-
-
         
-        #bounding box approximation of contour        
-##        x,y,w,h=cv2.boundingRect(c)
-##        coordArray=np.array([[x,y],[x+w,y+h]])
-##        r1check=0
-##        r2check=0
-##        r3check=0
-##        r4check=0
-##        r5check=0
-##        #check which region the bounding box is in            
-##        for coord in coordArray:            
-##            r1check=r1check+check(topLeft[0], topLeft[1], topRight[0], topRight[1], r1_br[0], r1_br[1], r1_bl[0], r1_bl[1], coord[0], coord[1])
-##            r2check=r2check+check(r2_tl[0], r2_tl[1], r2_tr[0], r2_tr[1], r2_br[0], r2_br[1], r2_bl[0], r2_bl[1], coord[0], coord[1])
-##            r3check=r3check+check(r3_tl[0], r3_tl[1], r3_tr[0], r3_tr[1], r3_br[0], r3_br[1], r3_bl[0], r3_bl[1], coord[0], coord[1])
-##            r4check=r4check+check(r4_tl[0], r4_tl[1], r4_tr[0], r4_tr[1], r4_br[0], r4_br[1], r4_bl[0], r4_bl[1], coord[0], coord[1])
-##            r5check=r5check+check(r5_tl[0], r5_tl[1], r5_tr[0], r5_tr[1], r5_br[0], r5_br[1], r5_bl[0], r5_bl[1], coord[0], coord[1])
-##        print r1check,r2check,r3check,r4check,r5check
-##        checkArray=np.array([r1check,r2check,r3check,r4check,r5check])
-##        index_max=np.argmax(checkArray)
-##        print index_max, " max"
-##        
-##        u2=topRight[0]
-##        v2=topRight[1]
-##        u1=topLeft[0]
-##        v1=topRight[1]
-##        distTot=np.sqrt((v2-v1)**2+(u2-u1)**2)
-##        ##### LINE EQUATION ########
-##        ## Line perpendicular to y=(m1)*x+(b1) and passes through (x,y)
-##        m1=(v1-v2)/(u1-u2)
-##        b1=v1-m1*u1
-##        mp=-(1/m1)
-##        bp=y-mp*x
-##        xint=(b1-bp)/(mp-m1)
-##        yint=mp*xint+bp
-##        cv2.line(img_rgb,(int(u1),int(v1)),(int(u2),int(v2)),(255,0,255),5)
-##        cv2.line(img_rgb,(int(xint),int(yint)),(int(x),int(y)),(250,100,0),5)
-##        cv2.circle(img_rgb,(int(xint),int(yint)),10,(200,200,0),10)
-##        cv2.imshow("preview",img_rgb)
-##        cv2.waitKey(0)
-##        now=datetime.datetime.now()
-##        fileName = 'rail' + now.strftime("%Y-%m-%d %H%M%S")
-##        completeName = os.path.join(figSavePath, fileName + '.png')
-##        snapshot(completeName,True,img_rgb)
-##        ## Distance between xint yint and a1 b1
-##        distint=np.sqrt((u1-xint)**2+(v1-yint)**2)
-##        railReturn=np.ceil(numOfRails*(distint/distTot))
-##        return railReturn
 
 def check(x1,y1,x2,y2,x,y):
     if (x1<=x<=x2) and (y1<=y<=y2):
@@ -852,15 +1061,15 @@ def check(x1,y1,x2,y2,x,y):
 ##figPathR = 'C:\Python27\shape-detection\shape-detection\snapshots\R'
 ##figPathB = 'C:\Python27\shape-detection\shape-detection\snapshots\B'
 ##figSavePath = 'C:\Python27\shape-detection\shape-detection\Match'
-##
+####
 ##capTemp=r'C:\Python27\shape-detection\shape-detection\templates\caps'
 ##icTemp=r'C:\Python27\shape-detection\shape-detection\templates\ic'
 ##ledTemp=r'C:\Python27\shape-detection\shape-detection\templates\led'
 ##resTemp=r'C:\Python27\shape-detection\shape-detection\templates\resistors'
-##
+####
 ##capPath=r'C:\Python27\shape-detection\shape-detection\snapshots\R'
 ##
-###calibrate: camera looks at the blank breadboard 
+##calibrate: camera looks at the blank breadboard 
 ####
 ####print getattr(cv2,"CAP_PROP_BRIGHTNESS")
 ####print getattr(cv2,"CAP_PROP_EXPOSURE")
