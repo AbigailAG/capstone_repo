@@ -25,7 +25,7 @@ print "initializing program"
     #TBD
     #setup GUI
 #RUN WITH ARDUINO WORKING?
-elecHardware = False
+elecHardware = True
 photoHardware = True
 
 
@@ -53,7 +53,8 @@ figSavePath = 'cam_data\Match'
 capTemp=r'cam_data\templates\caps'
 icTemp=r'cam_data\templates\ic'
 ledTemp=r'cam_data\templates\led'
-resTemp=r'cam_data\templates\resistors'
+resTemp=r'cam_data\templates\resistors\R'
+my_path = os.path.abspath(os.path.dirname(__file__))
 ##
 
 
@@ -117,7 +118,6 @@ while(LETSBUILD):
         #rect_r=np.array(pickle.load(open("cam_data/rect_r.obj","rb"))).flatten()
         r2_rails=pickle.load(open("cam_data/r2_rails.obj","rb"))
         r3_rails=pickle.load(open("cam_data/r3_rails.obj","rb"))
-
         #snapshot
         ###initiate video feed after the calibration is finished
         cv2.namedWindow("backgroundSubtract")#defining a window
@@ -125,25 +125,33 @@ while(LETSBUILD):
         vc = cv2.VideoCapture(0) #start and define video capture
         vc.set(cv2.CAP_PROP_AUTO_EXPOSURE,1)
         vc.set(cv2.CAP_PROP_AUTOFOCUS,1)
-        vc.set(cv2.CAP_PROP_BRIGHTNESS,110)
-        vc.set(cv2.CAP_PROP_CONTRAST,40)
-        fgbg=cv2.createBackgroundSubtractorMOG2(history=1000, varThreshold=75, detectShadows=False) #setting function parameters, not actual frames
+        vc.set(cv2.CAP_PROP_BRIGHTNESS,150)
+        vc.set(cv2.CAP_PROP_CONTRAST,45)
+        fgbg=cv2.createBackgroundSubtractorMOG2(history=1000, varThreshold=79, detectShadows=True) #setting function parameters, not actual frames
         subFlag=1 #later
         if vc.isOpened(): # try to get the first frame - check if camera is opened
-            rval, frameRaw = vc.read()   #read the frame for fun!
+            rval, frameRaw = vc.read()
+            print "waiting ....",
+            for i in xrange(1,500):
+                print ".",
+                rval, frameRaw = vc.read()
+                frame=four_point_transform(frameRaw,bbpoints)
+                fgmask = fgbg.apply(frame)
+                cv2.waitKey(20)
+                cv2.imshow("backgroundSubtract",fgmask)
+                cv2.imshow("preview",frame)
         else:
             rval = False #if it doesn't work, we have problems....deal with those later!
         while rval:
-
             #perform transformations
             ## four point transform image
             rval, frameRaw= vc.read()
+            
             frame=four_point_transform(frameRaw,bbpoints)
             railOver=frame.copy()
             for ind in xrange(len(r2_rails)):
                 rect_r2=np.array([r2_rails[ind]],dtype="int32")
                 cv2.drawContours(railOver,rect_r2,-1,(200,25,0),1)
-
                 rect_r3=np.array([r3_rails[ind]],dtype="int32")
                 cv2.drawContours(railOver,rect_r3,-1,(200,25,0),1)
             cv2.imshow("preview", railOver)
@@ -151,26 +159,34 @@ while(LETSBUILD):
                 fgmask = fgbg.apply(frame) #background subtract from frame
                 cv2.imshow("backgroundSubtract",fgmask)
 
-            key = cv2.waitKey(20) #check for userkey every whatever # of frames?
+            key = cv2.waitKey(20) 
             if key == 27: # exit on ESC - get out of jail free
                 cv2.destroyAllWindows()
                 vc.release()
                 break
             if key == 98: #pause the videoCapture for user to place component
                 subFlag=0 #stop taking video feed background subtract - in future may stop video here then background subtract after
-
-
             if key == 99: #component has been placed. Now time to detect and locate
                 subFlag=1
                 #wait 3 seconds for the camera to focus
-                time.sleep(3)
-                rval, frameRaw = vc.read() #read the frame
+                print "waiting ....",                
+                for i in xrange(1,200):
+                    rval, frameRaw = vc.read() #read the frame
+                    key = cv2.waitKey(20)
+                    print ".",
+                    frame=four_point_transform(frameRaw,bbpoints)                    
+                    cv2.imshow("preview",frame)                
+                cv2.imshow("backgroundSubtract",fgmask)
                 for i in xrange(1,15):
                     rval, frameRaw = vc.read() #read the frame
                     key = cv2.waitKey(20)
+                    print ".",
                     frame=four_point_transform(frameRaw,bbpoints)
                     fgmask = fgbg.apply(frame) #subtract
+                    cv2.imshow("preview",frame)
                     cv2.imshow("backgroundSubtract",fgmask)
+
+                
                 now=datetime.datetime.now() #getting time for filename
                 # save the real frame and background subtracted frame
                 my_path = os.path.abspath(os.path.dirname(__file__))
@@ -182,12 +198,11 @@ while(LETSBUILD):
                 snapshot(completeNameB,rval,fgmask) #save snapshot
                 snapshot(completeNameR,rval,frame)
                 #component detection
-                #compType=componentDetect(frame, resTemp, capTemp,icTemp,ledTemp,my_path)
+                compType=componentDetect(frame, fgmask, resTemp, capTemp,icTemp,ledTemp,my_path)
                 #component location
                 railOne,railTwo=componentLocate(fgmask,frame, 1,0,0,0)
                 print railOne,railTwo
-                # continue while loop for user to add another component.
-        vc.release()
+                # continue while loop for user to add another component.        
         cv2.destroyAllWindows()
 
 
@@ -198,16 +213,44 @@ while(LETSBUILD):
         moveOn = raw_input("Lindsays modules done...move on to Jamesons? (yes/no): ")
         if (moveOn == "yes"):
             LINDSAYISGO = False
-            print "Moving on to Jamesons mods...."
+            vc.release()
+            manualType = raw_input("Confirm type? (y/n) ")
+            if (manualType == "y"):
+                print "Moving on to Jamesons mods...."
+            else:
+                compType = raw_input("enter comp type: ")
         else:
             continue
 
+    if int(railOne)>=31: ##then it is in region 2 (rails 31-60)
+        railOne=int(railOne)-23 #convert between 9-15
+    else:
+        railOne=int(railOne)-1 ##convert between 0-7
+    if int(railTwo)<=30:        ## then it is in region 1 (rails 1-30)
+        railTwo=int(railTwo)-1 ## convert between 0-7
+    else:
+        railTwo=int(railTwo)-23  ## convert between 9-15
+    print "railOne Converted", railOne
+    print "railTwo Converted", railTwo
+    #manual input
+    
+    
     JAMESONISGO = True
     while(JAMESONISGO):
 
+        #railOne = raw_input("Rail1: ")
+        #railOne = int(railOne)
+        #railTwo = raw_input("Rail2: ")
+        #railTwo = int(railTwo)
+        #compType = raw_input("Comp type: ")
+
         lastComponentName = compType #always resistor for now
-        railOne = int(railOne) - 1
-        railTwo = int(railTwo) - 1
+        #changing value to 0-15
+        
+        
+        
+
+        testRailCheck = grid.checkDummy(railOne,railTwo)
 
         if (text == "kill"):
             break
@@ -221,27 +264,41 @@ while(LETSBUILD):
                 # eg. arduino.buildResistor(0, 2, [["resistor", 1000], ["resistor", 5000]])
                 #  Note that if you don't have any other components in parallel then you only have to provide 2 arguments
                 #   since otherComponents will default to [] if nothing is provided
-                compVal= arduino.buildResistor(int(railOne), int(railTwo), otherComponents) #NOTE: railOne and railTwo
+                compVal= arduino.buildResistor(int(railOne), int(railTwo), testRailCheck) #NOTE: railOne and railTwo
             elif (lastComponentName == "capacitor"):
                 otherComponents = []
                 # COMMAND: buildCapacitor(self, rail1, rail2, otherComponents=[])
                 # Checks the capacitance of a capacitor between rail1 and rail2, and returns the capacitance value in uF
                 # eg. arduino.buildCapacitor(0, 1)
-                print arduino.buildCapacitor(int(railOne), int(railTwo), otherComponents)
+                compVal = arduino.buildCapacitor(int(railOne), int(railTwo), otherComponents)
+                print "CAP MEASURE"
+                print compVal
+                compVal = compVal*1000 #reporting in nF for time being
+                
             elif (lastComponentName == "diode"):
                 otherComponents = []
                 # COMMAND: buildDiode(self, rail1, rail2, otherComponents=[])
                 # Checks the polarity of the diode between rail1 and rail2, and returns either arduinoController.CONSTANTS["FORWARD_BIAS"]
                 #  if rail1 is the positive end, or arduinoController.CONSTANTS["REVERSE_BIAS"] if rail2 is the positive end
                 # eg. arduino.buildDiode(5, 6)
-                val = arduino.buildDiode(int(railOne), int(railTwo), otherComponents)
-                if val == arduinoController.CONSTANTS["FORWARD_BIAS"]:
-                    print "Forward Biased. Flows from rail " + railOne + " to " + railTwo
+                compVal = arduino.buildDiode(int(railOne), int(railTwo), otherComponents)
+                print "WHAT IS THIS"
+                print compVal
+                if compVal == arduinoController.CONSTANTS["FORWARD_BIAS"]:
+                    print "Forward Biased. Flows from rail " + str(railOne) + " to " + str(railTwo)
                 else:
-                    print "Reverse Biased. Flows from rail " + railOne + " to " + railTwo
+                    print "Reverse Biased. Flows from rail " + str(railOne) + " to " + str(railTwo)
             else:
                 print "Error: Unexpected input. Discarding command"
             print compVal
+
+            print "Component is added!"
+            nextComponent = Component()
+            print "HERE!!! " + str(compType)
+            nextComponent.newComponent(compType,str(int(compVal)),"default",railOne,railTwo) #VALUES NEED TO BE CORRECTED
+            grid.addComponent(nextComponent)
+            print grid.getNodes()
+            grid.drawGrid()
 
             moveOn = raw_input("Jamesons modules done...move on to Abis? (yes/no): ")
             if (moveOn == "yes"):
@@ -251,11 +308,11 @@ while(LETSBUILD):
                 continue
 
 
-    nextComponent = Component()
-    nextComponent.newComponent("R",str(compVal),"default",railOne,railTwo,[0,0,0,0]) #VALUES NEED TO BE CORRECTED
-    grid.addComponent(nextComponent)
+##    nextComponent = Component()
+##    nextComponent.newComponent("R",str(compVal),"default",railOne,railTwo,[0,0,0,0]) #VALUES NEED TO BE CORRECTED
+##    grid.addComponent(nextComponent)
 
-    grid.drawGrid()
+##    grid.drawGrid()
 
     moveOn = raw_input("Component added...move on to Check? (yes/no): ")
     if (moveOn == "yes"):
@@ -290,15 +347,16 @@ while(LETSRUN):
 ##            continue
 ##        else:
 ##            railNums.append(int(i))
-    ans = arduino.runVoltage([railOne,railTwo])
+    railsToMeasure = grid.getRealNodes()
+    ans = arduino.runVoltage(railsToMeasure)
     for i in ans:
         print i, ans[i]
 
     count = count + 1
     if (count > 100):
-        moveOn = raw_input("Board has been checked...power on board? (yes/no): ")
-        if (moveOn=="yes"):
-            print "Powering on!"
+        moveOn = raw_input("Run board again? (yes/no): ")
+        if (moveOn=="no"):
+            print "Powering off!"
             LETSRUN = False #move on for now...
         else:
             continue
@@ -429,6 +487,3 @@ arduino.changeMode(arduinoController.CONSTANTS["MODE_BUILD"])
 
 # Turn the power off
 ##arduino.runPower(arduinoController.CONSTANTS["SWITCH_OFF"])
-
-
-

@@ -1,0 +1,34 @@
+item {
+  id: 1
+  name: 'resistor'
+}
+
+item {
+  id: 2
+  name: 'capacitor'
+}
+
+item {
+  id: 3
+  name: 'LED_yellow'
+}
+
+item {
+  id: 4
+  name: 'LED_green'
+}
+
+item {
+  id: 5
+  name: 'LED_blue'
+}
+
+item {
+  id: 6
+  name: 'LED_white'
+}
+
+item {
+  id: 7
+  name: 'IC'
+}

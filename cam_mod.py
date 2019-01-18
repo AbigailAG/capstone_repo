@@ -545,9 +545,8 @@ def calibrate(frame):
         cv2.destroyAllWindows()
 
 
-def componentDetect(frame, resTemp, capTemp,icTemp,ledTemp,my_path):
-        ### Detect Components in frame
-                cv2.destroyAllWindows()
+def componentDetect(frame, fgmask,resTemp, capTemp,icTemp,ledTemp,my_path):
+        ### Detect Components in frame                
                 resMat=[]
                 capMat=[]
                 ledMat=[]
@@ -556,8 +555,74 @@ def componentDetect(frame, resTemp, capTemp,icTemp,ledTemp,my_path):
                 capCount=0
                 ledCount=0
                 icCount=0
-                src_img = np.copy(frame)
-                img_gray = cv2.cvtColor(src_img, cv2.COLOR_BGR2GRAY)
+
+                #####################
+                ####################
+                # Standard imports
+                # Setup SimpleBlobDetector parameters.
+                params = cv2.SimpleBlobDetector_Params()
+                # Change thresholds
+                params.minThreshold = 10;
+                params.maxThreshold = 200;
+                 
+                # Filter by Area.
+                params.filterByArea = True
+                params.minArea = 20
+                 
+                # Filter by Circularity
+                params.filterByCircularity = True
+                params.minCircularity = 0.2
+                 
+                # Filter by Convexity
+                params.filterByConvexity = True
+                params.minConvexity = 0.05
+                 
+                # Filter by Inertia
+                params.filterByInertia = True
+                params.minInertiaRatio = 0.01
+                 
+               
+                detector = cv2.SimpleBlobDetector_create(params)
+                
+                print params.filterByColor
+                print params.filterByArea
+                print params.filterByCircularity
+                print params.filterByInertia
+                print params.filterByConvexity
+                
+                # Read image
+                im=frame.copy()
+                gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                fgmask_inv=cv2.bitwise_not(fgmask)
+                # Set up the detector with default parameters.
+                #detector = cv2.SimpleBlobDetector()                 
+                # Detect blobs.
+                keypoints = detector.detect(fgmask_inv)
+                 
+                # Draw detected blobs as red circles.
+                # cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS ensures the size of the circle corresponds to the size of blob
+                im_with_keypoints = cv2.drawKeypoints(fgmask_inv, keypoints, np.array([]), (0,0,255), cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
+                 
+                # Show keypoints
+                cv2.imshow("preview", im_with_keypoints)
+                cv2.waitKey(0)
+
+                #######################
+                #####################
+                ## erode and dilate the threshed image to remove noise
+                #fgmask_ed=cv2.cvtColor(fgmask, cv2.COLOR_BGR2GRAY)
+                fgmask_ed=cv2.erode(fgmask, None, iterations=1)
+                ##cv2.imshow("preview",thresh)
+                ##cv2.waitKey(0)
+                fgmask_ed=cv2.dilate(fgmask_ed, None, iterations=4)
+                rows,cols = fgmask_ed.shape
+                roi = frame[0:rows, 0:cols ]
+                frameMask = cv2.bitwise_and(roi,roi,mask = fgmask_ed)
+                src_img=frameMask.copy()
+                cv2.imshow("preview",src_img)
+                
+                cv2.waitKey(0)
+                cv2.destroyAllWindows()
                 ## Check if resistors
                 for templateFile in os.listdir(os.path.join(my_path,resTemp)):
                     tempName= os.path.join(my_path,resTemp, templateFile)
@@ -565,7 +630,7 @@ def componentDetect(frame, resTemp, capTemp,icTemp,ledTemp,my_path):
                     template = cv2.imread(tempName)
                     c,w, h  = template.shape[::-1]
                     res = cv2.matchTemplate(src_img,template,cv2.TM_CCOEFF_NORMED)           
-                    threshold = 0.63
+                    threshold = 0.68
                     loc = np.where( res >= threshold)
                     for pt in zip(*loc[::-1]):
                         cv2.rectangle(src_img, pt, (pt[0] + w, pt[1] + h), (255,0,255), 5)
@@ -576,9 +641,8 @@ def componentDetect(frame, resTemp, capTemp,icTemp,ledTemp,my_path):
                     cv2.rectangle(src_img,resistor[0],resistor[1],(255,255,0),5)
                 cv2.imshow("preview", src_img)
                 cv2.waitKey(0)
-                cv2.destroyAllWindows()
                 ## Check if caps
-                src_img = np.copy(src_img)
+                src_img = np.copy(frameMask)
                 for templateFile in os.listdir(os.path.join(my_path,capTemp)):        
                     tempName= os.path.join(my_path,capTemp, templateFile)
                     template = cv2.imread(tempName)
@@ -597,13 +661,15 @@ def componentDetect(frame, resTemp, capTemp,icTemp,ledTemp,my_path):
                 cv2.waitKey(0)
                 cv2.destroyAllWindows()                
                 ## Check if LEDs
-                for templateFile in os.listdir(os.path.join(my_path,ledTemp)):
-                    tempName= os.path.join(my_path,ledTemp, templateFile)
+                pathR=os.listdir(os.path.join(my_path,ledTemp,"R"))
+                pathB=os.listdir(os.path.join(my_path,ledTemp,"B"))
+                for templateFile in pathR:
+                    tempName= os.path.join(my_path,ledTemp,"R", templateFile)
                     tempName=os.path.join(tempName)
                     template = cv2.imread(tempName)
-                    c,w, h  = template.shape[::-1]
+                    #c,w, h  = template.shape[::-1]
                     res = cv2.matchTemplate(src_img,template,cv2.TM_CCOEFF_NORMED)           
-                    threshold = 0.65
+                    threshold = 0.55
                     loc = np.where( res >= threshold)
                     for pt in zip(*loc[::-1]):
                         cv2.rectangle(src_img, pt, (pt[0] + w, pt[1] + h), (200,100,100), 5)
@@ -634,9 +700,16 @@ def componentDetect(frame, resTemp, capTemp,icTemp,ledTemp,my_path):
                 cv2.imshow("preview", src_img)
                 cv2.waitKey(0)
                 cv2.destroyAllWindows()
+                compCount=[resCount,capCount,ledCount,icCount]
+                namMat=["resistor","capacitor","diode","IC"]
+                compCountNum=max(compCount)
+                for ind in xrange(len(compCount)):
+                        if compCount[ind]==compCountNum:
+                                compName=namMat[ind]
+                print compName            
                 #return resCount,capCount,ledCount,icCount
-                componentName="resistor"
-                return componentName
+                #componentName="resistor"
+                return compName
 
 def componentLocate(fgmask,frame, resCount,capCount,ledCount,icCount):
 ############# LOCATION FIND ######################
@@ -762,8 +835,8 @@ def componentLocate(fgmask,frame, resCount,capCount,ledCount,icCount):
         cv2.circle(ext_img,extRight,8, (0, 255,0), -1)
         cv2.circle(ext_img,extTop,8, (255, 0, 0), -1)
         cv2.circle(ext_img,extBot,8, (255, 255,0 ), -1)
-##        cv2.imshow("preview",ext_img)
-##        cv2.waitKey(0)                  
+        ##cv2.imshow("preview",ext_img)
+        ##cv2.waitKey(0)                  
 
         ## approx the contour
         approx_img=frame.copy()
@@ -776,8 +849,8 @@ def componentLocate(fgmask,frame, resCount,capCount,ledCount,icCount):
         hull = cv2.convexHull(c)
         hull_img=frame.copy()
         cv2.drawContours(hull_img,[hull],-1,(255,255,0),3)
-##        cv2.imshow("preview",hull_img)
-##        cv2.waitKey(0)
+        cv2.imshow("preview",hull_img)
+        cv2.waitKey(0)
 
          ######################
         #########################
@@ -870,8 +943,7 @@ def cross_rails(c_hull,img_rgb,thresh_img,minr3,maxr3,minr2,maxr2):
     else:
         rail2=0
         print "unknown error rail2"
-    print "rail1:",rail1
-    print "rail2:", rail2
+ 
     rail1=30-rail1
     rail2=60-rail2
     return rail1,rail2
