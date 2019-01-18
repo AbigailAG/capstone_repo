@@ -1,3 +1,5 @@
+
+#won't need random number generator in end
 import random
 import numpy as np
 from Component import *
@@ -6,15 +8,16 @@ from graphics import *
 class GridAndNodesAndComps:
 
     def __init__(self):
-        self.n = 16 #total of 7 rows and columns in grid - MUST BE ODD   
-        self.c = 10 #max 10 allowable components for time being
+        self.n = 15 #total of 7 rows and columns in grid - MUST BE ODD   
+        self.c = 10 #max 10 allowable components for time being - this doesn't apply any more....
         self.grid = False
         self.nodes = []
-        self.comps = []
+        self.comps = [] #list of component objects
+        self.compsLoose = [] #list of detached components
         self.firstComponent = True #initially True
         self.componentCounter = 0 #start counting at 0
 
-        self.realNodes = []
+        self.realNodes = [] #physical nodes to pass to Jamesons program to measure voltage at
         self.equivalencies = [] #track which rows are the same node (connected by wires)
     
         self.wires = []
@@ -36,6 +39,10 @@ class GridAndNodesAndComps:
     def setNodes(self,nodeRow):
         (self.nodes).append(nodeRow)
         #print self.nodes
+    def setPowerNode(self,powerNodeInput):
+        self.powerNode = powerNodeInput
+    def setGroundNode(self,groundNodeInput):
+        self.groundInput = groundNodeInput
 
 
     def initialize(self):
@@ -45,8 +52,9 @@ class GridAndNodesAndComps:
             #initNodeRow = [False,[0]*self.n,0,0,0] #T/F,n nodes, comp#, col#, row# <- can't use this, makes all items in list linked, can't change 1 without changing the others
             self.nodes = [[False,[0]*self.n,0,0,0] for nodesRows in range(self.c)]
 
-            #initCompsRow = [False,0,0,0,0] #T/F, comp #, type&value OR reference,T/F  
-            self.comps = [[False,0,0,0] for compsRows in range(20)]
+            #initCompsRow = [False,0,0,0,0] #T/F, comp #, type&value OR reference,T/F - not anymore, just placing in component objects
+            #####HERE - done
+            self.comps = []
             print "Grid initialized with " + str(self.n+1) + "-by-" + str(self.n+1) + " matrix, max " + str(self.c) + " components." 
 
             #clean up
@@ -84,8 +92,13 @@ class GridAndNodesAndComps:
             compType = newComponent.getType()
             compValue = newComponent.getValue()
 
+            #update object - MOVE TO BEFORE SELF.COMP CONFIG ONCE REDONE
+            newComponent.setCompID(self.componentCounter)
+            print "Component: " + str(self.componentCounter) + " added! (" + str(compType)+ " " + str(compValue) + ")"
+            
             #add info to Comps
-            self.comps[0] = [True,self.componentCounter,(str(compType)+ " " + str(compValue)),True] #first can be true so long as first component connected to power
+            #####HERE - done
+            self.comps.append(newComponent) #first can be true so long as first component connected to power
 
             #add info to Nodes
             self.nodes[0][0] = True
@@ -94,6 +107,7 @@ class GridAndNodesAndComps:
             self.nodes[0][2] = self.componentCounter
             self.nodes[0][-2] = 0
             self.nodes[0][-1] = 0
+
 
             #add to grid
             self.grid[0][0] = self.componentCounter + 1
@@ -110,6 +124,7 @@ class GridAndNodesAndComps:
             #print self.comps
             #wanna run visualization thingy here
 ##            print self.nodes, self.comps
+            print self.comps
             return
 
         else: #this is NOT the first component
@@ -125,7 +140,11 @@ class GridAndNodesAndComps:
                 (self.realNodes).append(compNode2)
             if ((not(compNode2 in self.realNodes)) and (not(compNode1 in self.realNodes))):
                 #THIS COMPONENT IS NOT CONNECTED TO ANYTHING YET
-                looseComp = True
+                compIsLoose = True
+                self.compsLoose.append(newComponent)
+            else:
+                compIsLoose = False
+                newComponent.setCompConnected()
                                                 
             compType = newComponent.getType()
             compValue = newComponent.getValue()
@@ -136,7 +155,7 @@ class GridAndNodesAndComps:
                 #wires need to be handled differently
                 (self.wires).append(newComponent)
                 print "Wire added!"
-                return 
+                return
 
             #add info to Nodes
             
@@ -145,17 +164,23 @@ class GridAndNodesAndComps:
             self.nodes[self.componentCounter][1][compNode2] = 1
             self.nodes[self.componentCounter][2] = self.componentCounter
 
+            #update object
+            newComponent.setCompID(self.componentCounter)
+            print "Component: " + str(self.componentCounter) + " added! (" + str(compType)+ " " + str(compValue) + ")"
 
-            #CHECK nodes
-            otherList, diff = self.checkNodes(self.nodes[self.componentCounter],self.componentCounter)
-            if (diff != 0):
-                self.groundNode = self.powerNode + diff 
+            #CHECK nodes if component is RCD, wire (??) or gate - NOT full IC
+            if ((newComponent.getType() == 'resistor') or (newComponent.getType() == 'capacitor') or (newComponent.getType() == 'diode') or (newComponent.getType() == 'wire') or (newComponent.getType() == 'gate')):
+                otherList, diff = self.checkNodes(self.nodes[self.componentCounter],self.componentCounter)
+                if (diff != 0):
+                    self.groundNode = self.powerNode + diff
 
             #add info to Comps
-            self.comps[self.componentCounter][0] = True
-            self.comps[self.componentCounter][1] = self.componentCounter
-            self.comps[self.componentCounter][2] = compName
-##            if looseComp: NEED TO FINISH THIS
+            #HERE - shouldn't need this part anymore
+            #self.comps[self.componentCounter][0] = True
+            #self.comps[self.componentCounter][1] = self.componentCounter
+            #self.comps[self.componentCounter][2] = compName
+            self.comps.append(newComponent)
+##            if looseComp: NEED TO FINISH THIS - NOT IS USE ANYMORE
 ##                self.comps[self.componentCounter][3] = False
 ##            else:
 ##                self.comps[self.componentCounter][3] = True
@@ -170,6 +195,8 @@ class GridAndNodesAndComps:
             compValue = None
             compName = None
             #end addComponent
+
+            print self.comps
         
     def checkNodes(self,COMPARE_THIS_ROW, ROW_NUMBER):
         relationships = []
@@ -190,6 +217,7 @@ class GridAndNodesAndComps:
                     continue
                 elif (sumOfMultiplyCols == 1):
                     print "In Series!"
+
                     #these two rows are in series
                     #check if True or False component
 ##                    if (self.comps[eachRow[2]][3]):
@@ -214,7 +242,8 @@ class GridAndNodesAndComps:
                                 point2 = countCols
 
                     #if (point2 > point1):
-                    colsDiff = point2 - self.powerNode
+                    colsDiff = point2 - self.powerNode #!
+                    break
                     #else:
                        # colsDiff = point1 - point2
 
@@ -224,7 +253,9 @@ class GridAndNodesAndComps:
 ##                        continue
                 elif (sumOfMultiplyCols == 2):
                     print "In Parallel!"
-                    partInParallel = self.comps[eachRow[2]][2]
+                    
+                    #####HERE
+                    partInParallel = (self.comps[eachRow[2]]).getCompID() #
                     relationships.append(partInParallel)
                     #these two rows are in parallel
                     
@@ -234,9 +265,27 @@ class GridAndNodesAndComps:
                     self.nodes[self.componentCounter][-2] = rowNew #column position
                     self.nodes[self.componentCounter][-1] = columnNew #row position
                     colsDiff = 0
+                    
+        print "SELF.GRID"
+        print self.grid
+        
+        for counter in range(20):
+            print "check"
+            print counter
+            print self.grid[columnNew+counter][rowNew]
+            if (self.grid[columnNew+counter][rowNew] == 0):
+                self.grid[columnNew+counter][rowNew] = self.componentCounter + 1
+                break
+            else:
+                continue
 
-                if (self.grid[columnNew][rowNew] == 0):
-                    self.grid[columnNew][rowNew] = self.componentCounter + 1
+        print "SELF.GRID"
+        print self.grid
+        
+
+        #if (self.comps[ROW_NUMBER].getCompConnected()):
+            #check if component had no connections
+            
 
         try:
             colsDiff
@@ -266,9 +315,17 @@ class GridAndNodesAndComps:
         return listFormatted
 
     def drawGrid(self):
-
-        self.comps[7] = [True,100,("Power"),True]
-        self.comps[8] = [True,200,("Ground"),True]
+        #####HERE
+        PowerComp = Component()
+        PowerComp.newComponent("Power","","source",0,0)
+        self.comps.append(PowerComp)
+        print PowerComp.getType()
+        GroundComp = Component()
+        GroundComp.newComponent("Ground","","source",0,0)
+        self.comps.append(GroundComp)
+        print GroundComp.getType()
+        #self.comps[7] = [True,100,("Power"),True]
+        #self.comps[8] = [True,200,("Ground"),True]
         
         currentGrid = self.grid
         
@@ -283,7 +340,72 @@ class GridAndNodesAndComps:
         currentGrid= np.delete(currentGrid,np.where(~currentGrid.any(axis=1))[0], axis=0)
         currentGrid= np.delete(currentGrid,np.where(~currentGrid.any(axis=0))[0], axis=1)
 
+        print "CurrentGrid before drawing"
         print currentGrid
+        #####HERE
+        for eachComp in self.comps:
+            typeAndValue = str(eachComp.getType()) + " " + str(eachComp.getValue())
+            if ((typeAndValue == "diode forward") or (typeAndValue == "diode reverse")):
+                compIDNum = eachComp.getCompID()+1
+                print compIDNum
+                print "compindex"
+                placeholderList = currentGrid.tolist()
+                print "placeholder list"
+                print placeholderList
+                rowNum = 0
+                for eachItem in placeholderList:
+                    try:
+                        colNum = eachItem.index(compIDNum)
+                        break
+                    except:
+                        rowNum = rowNum + 1
+                if (colNum == 0):
+                    #connected to power - check if node1 of diode = powerNode
+                    if (eachComp.getNodeI() == self.powerNode):
+                        print "no switch for diode"
+                        if (eachComp.getValue() == "forward"):
+                            eachComp.setValue("forward->")
+                        else:
+                            eachComp.setValue("<-reverse")
+                        #no change required
+                        continue
+                    else:
+                        print "diode switched"
+                        #otherwise need to switch polarity
+                        if (eachComp.getValue() == "forward->"):
+                            eachComp.setValue("<-reverse")
+                        else:
+                            eachComp.setValue("forward->")
+                            continue
+                else:
+                    #get component before
+                    for scrollCount in range(20):
+                        if (placeholderList[scrollCount][(colNum-1)] == 0):
+                            continue
+                        else:
+                            attachedComp = placeholderList[scrollCount][(colNum-1)]
+                            print "Component Previous: "
+                            print attachedComp
+                            break
+                    if (self.comps[attachedComp-1].getNodeO() == eachComp.getNodeI()):
+                        print "no switch for diode"
+                        if (eachComp.getValue() == "forward"):
+                            eachComp.setValue("forward->")
+                        else:
+                            eachComp.setValue("<-reverse")
+                        #no change required
+                        continue
+                    else:
+                        print "diode switched"
+                        #otherwise need to switch polarity
+                        if (eachComp.getValue() == "forward->"):
+                            eachComp.setValue("<-reverse")
+                        else:
+                            eachComp.setValue("forward->")
+                            continue
+                    ##self.comps[attachedComp][
+                    
+
         dimX = 500.0
         dimY = 500.0
 
@@ -296,12 +418,18 @@ class GridAndNodesAndComps:
         if (self.wires != []):
             if (((self.wires[0].getNodeI() == self.powerNode) or (self.wires[0].getNodeI() == self.groundNode)) and ((self.wires[0].getNodeO() == self.powerNode) or (self.wires[0].getNodeO() == self.groundNode))):
                 print "WARNING - WIRE CONNECTING POWER AND GROUND"
+
+        print "FLAG 1"
+        print currentGrid
         
         middleRow = rows/2
         currentGrid = np.insert(currentGrid, 0, 0, axis=1)
-        currentGrid[middleRow][0] = 8
+        currentGrid[0][0] = self.componentCounter + 1
         currentGrid = np.insert(currentGrid, cols+1, 0, axis=1)
-        currentGrid[middleRow][cols+1] = 9
+        currentGrid[0][cols+1] = self.componentCounter + 2
+
+        print "FLAG 2"
+        print currentGrid
 
         if (rows == 0):
             print "only 1 row"
@@ -314,21 +442,31 @@ class GridAndNodesAndComps:
         V = []
         nodeCounter = 0
         
-        for i in range(0,10):
+        for i in range(0,10): #randomly generated voltages
             x = random.randint(1,10)
             V.append(x)
 
-        current = random.randint(0,50)
+        current = random.randint(0,50) #randomly generated current
     
         rowCount = -1
+        currentGridRow = -1
         for eachRow in currentGrid:
             
             colCount = 1
             rowCount = rowCount + 2
+            currentGridRow = currentGridRow + 1
+            currentGridCol = 0
             
             for eachCol in eachRow:
-                print "draw comp..."
-                if ((rowCount > 1) and (colCount>1) and (colCount<4)):
+
+                print "At position: " + str(rowCount) + "," + str(colCount)
+                if (currentGrid[currentGridRow][currentGridCol] == 0):
+                    colCount = colCount + 2
+                    currentGridCol = currentGridCol + 1
+                    continue
+
+
+                if ((rowCount > 1) and (colCount>1) and (colCount<10)): #IF LINES ARE NOT SHOWING UP, TRY MODIFYING THESE
                     #draw parallel lines between current and previous component
                     lineRowPos = (rowCount*rowMultiplier)
                     newLineRowPos = (rowCount-2)*rowMultiplier
@@ -348,13 +486,22 @@ class GridAndNodesAndComps:
                 #if (colCount > 1):
                     #draw line between current and last component
                     #not neccessary at moment....will be in future
-                compName = self.comps[eachCol-1][2]
-                if (compName == 0):
+                #HERE
+                print "WHAT'S THIS"
+                print self.comps[eachCol-1].getCompID()
+                print eachCol
+                compName = (str(self.comps[eachCol-1].getType())[0]) + " " + str((self.comps[eachCol-1].getValue()))
+                print compName
+                if (compName == 0): #if there's nothing there, skip - NOT SURE THIS IS DOING ANYTHING ANYMORE, BUT WHATEVS
+                    print "SKIP"
                     colCount = colCount + 2
+                    currentGridCol = currentGridCol + 1
                     continue
 
-                drawComp = Text(Point(colCount*colMultiplier,rowCount*rowMultiplier),compName)
+                drawComp = Rectangle(Point(colCount*colMultiplier-20,rowCount*rowMultiplier+10), Point(colCount*colMultiplier+20,rowCount*rowMultiplier-10))
                 drawComp.draw(mainpage)
+                labelComp = Text(Point(colCount*colMultiplier,rowCount*rowMultiplier+20),compName)
+                labelComp.draw(mainpage)
 
                 Point1 = Point(colCount*colMultiplier-colMultiplier,rowCount*rowMultiplier)
                 Point2 = Point(colCount*colMultiplier-30,rowCount*rowMultiplier)
@@ -368,22 +515,24 @@ class GridAndNodesAndComps:
                 drawLine.draw(mainpage)
                 
                 colCount = colCount + 2
+                currentGridCol = currentGridCol + 1
 
         for eachCol in range(1,colCount/2):
             if (eachCol == 1):
                 currentPoint = Point(eachCol*colMultiplier*2-colMultiplier,480)
                 textCurrent = Text(currentPoint,"Current: " + str(current))
-                textCurrent.draw(mainpage)
+                ##textCurrent.draw(mainpage) #inactive - for now we're NOT utilizing current measurements
             textPoint = Point(eachCol*colMultiplier*2,20)
-            drawNode =  Text(textPoint,V[nodeCounter])
+            drawNode =  Text(textPoint,V[nodeCounter]) 
             nodeCounter = nodeCounter + 1
-            drawNode.draw(mainpage)
+            ##drawNode.draw(mainpage) #inactive - for now we're reading voltage readings from command line
 
         click = mainpage.getMouse()
         mainpage.close()
 
-        self.comps[-1] = [False,0,0,0]
-        self.comps[-2] = [False,0,0,0]
+        #####HERE
+        self.comps.remove(PowerComp) #remove power and ground components from comp list
+        self.comps.remove(GroundComp) 
                 
         #end drawgrid
         
@@ -393,49 +542,86 @@ testCase = GridAndNodesAndComps()
 testCase.initialize()
 
 ##addedComponent = Component()
-##addedComponent.newComponent("IC","7408","IC",0,0)
+##addedComponent.newComponent("IC","7408","IC",0,13)
 ##testCase.addComponent(addedComponent)
 ##
 ##print addedComponent.getSuperComp()
 #need to initialize ICs as well?
 ##if (addedComponent.getSuperComp()):
+##    print "Component is super component - " + str(addedComponent.getCompID())
 ##    #if supercomp - need to initialize other components as well
 ##    totalPins = int(addedComponent.getNodeO()) - int(addedComponent.getNodeI())
 ##    totalGates = (addedComponent.getMakeUp())
+##    print "Made up of: " + str(totalGates) + " gates"
 ##    jumpValue = (totalPins)/int(totalGates)
 ##    logicInputType = addedComponent.getNodeConfig()
-##    if (logicInputType == "
-##    for eachSingleGate in range(1,totalPins-2,jumpValue):        
-##        gateComponent = Component()
-##        gateComponent.newComponent("gate",addedComponent.getValue(),addedComponent.getNodeConfig(),eachSingleGate,0)
-        
+##    if (logicInputType == "2in1out"):
+##        for eachSingleGate in range(1,totalPins-2,jumpValue):        
+##            gateComponent = Component()
+##            gateComponent.newComponent("gate",addedComponent.getValue(),addedComponent.getNodeConfig(),eachSingleGate,0)
+##            testCase.addComponent(gateComponent)
+##            gateComponent.setParentComp(addedComponent.getCompID())
+##            addedComponent.addSubComponent(gateComponent)
+##            testCase.getNodes()
+##    elif (logicInputType == "2in-1out"):
+##        for eachSingleGate in range(2,totalPins-2,jumpValue):
+##            gateComponent = Component()
+##            gateComponent.newComponent("gate",addedComponent.getValue(),addedComponent.getNodeConfig(),eachSingleGate,0)
+##            testCase.addComponent(gateComponent)
+##            gateComponent.setParentComp(addedComponent.getCompID())
+##            addedComponent.addSubComponent(gateComponent)
+            
+
 
 #print testCase.getNodes()
 
 ##
 ##testCase.drawGrid()
-##
+####
 ##secondComponent = Component()
-##
-##secondComponent.newComponent("resistor","9.89k","default",4,3,[0,0,0,0])
-##
+##secondComponent.newComponent("resistor","100","default",4,3)
 ##testCase.addComponent(secondComponent)
 ##print testCase.getRealNodes()
 ##
 ##testCase.drawGrid()
 ##
-##thirdComponent = Component()
-##thirdComponent.newComponent("R","6.8k","default",3,10,[0,0,0,0])
-##
-##testCase.addComponent(thirdComponent)
+
 ##
 ##
-####testCase.drawGrid()
+##testCase.drawGrid()
 ####
+
+
+firstComponent = Component()
+firstComponent.newComponent("resistor","2000","default",1,3)
+testCase.addComponent(firstComponent)
+
+testCase.drawGrid()
+
+secondComponent = Component()
+secondComponent.newComponent("capacitor","10","default",3,6)
+testCase.addComponent(secondComponent)
+
+testCase.drawGrid()
+
+thirdComponent = Component()
+thirdComponent.newComponent("diode","forward","default",3,6)
+testCase.addComponent(thirdComponent)
+
+testCase.drawGrid()
+
 ##fourthComponent = Component()
-##fourthComponent.newComponent("resistor","5000","default",3,10)
+##fourthComponent.newComponent("diode","forward","default",6,10)
 ##testCase.addComponent(fourthComponent)
 ##
+##testCase.drawGrid()
+##
+##fifthComponent = Component()
+##fifthComponent.newComponent("capacitor","10","default",6,10)
+##testCase.addComponent(fifthComponent)
+##
+##testCase.drawGrid()
+
 ##fifthComponent = Component()
 ##fifthComponent.newComponent("resistor","9000","default",3,10)
 ##testCase.addComponent(fifthComponent)
@@ -445,4 +631,10 @@ testCase.initialize()
 
 
 ##
-##testCase.drawGrid()
+
+
+#need to add dedicated checking module - check for any circuit with no resistance (wire, C or D alone)
+#need to redo self.comps - just store comp objects!!! - will make diode implementation easier
+#do more clean up
+
+
