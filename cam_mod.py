@@ -21,9 +21,48 @@ from scipy import signal
 from imutils import perspective
 from imutils import contours
 from collections import defaultdict
+from imutils.paths import list_images
+import mahotas
 
 
 ############## Defining Functions ##############################
+
+class Searcher:
+	def __init__(self, index):
+		# store the index that we will be searching over
+		self.index = index
+ 
+	def search(self, queryFeatures):
+		# initialize our dictionary of results
+		results = {}
+ 
+		# loop over the images in our index
+		for (k, features) in self.index.items():
+			# compute the distance between the query features
+			# and features in our index, then update the results
+			d = dist.euclidean(queryFeatures, features)
+			results[k] = d
+ 
+		# sort our results, where a smaller distance indicates
+		# higher similarity
+		results = sorted([(v, k) for (k, v) in results.items()])
+ 
+		# return the results
+		return results
+
+
+
+	    
+class ZernikeMoments:
+	def __init__(self, radius):
+		# store the size of the radius that will be
+		# used when computing moments
+		self.radius = radius
+ 
+	def describe(self, image):
+		# return the Zernike moments for the image
+		return mahotas.features.zernike_moments(image, self.radius)
+
 
 def order_points_old(pts):
 	# initialize a list of coordinates that will be ordered
@@ -143,6 +182,7 @@ def segment_by_angle_kmeans(lines, k=2, **kwargs):
         segmented[labels[i]].append(line)
     segmented = list(segmented.values())
     return segmented
+
 def intersection(line1, line2):
     """Finds the intersection of two lines given in Hesse normal form.
 
@@ -443,7 +483,7 @@ def calibrate(frame):
         B=r3_br+0.9*side_w*bbot*ubt
         ind=r1_xt.size-1
         r3_rails[-1]=[[r3_xt[ind-1],r3_yt[ind-1]],[A[0][0],A[0][1]],[B[0][0],B[0][1]],[r3_xb[ind-1],r3_yb[ind-1]]]
-        
+        img_thing=four_point_transform(img_rgb.copy(),bbpoints)
         #draw each rail     
         for ind in xrange(len(r_rails)):
               rect_r=np.array([r_rails[ind]],dtype="int32")
@@ -544,172 +584,112 @@ def calibrate(frame):
 
         cv2.destroyAllWindows()
 
+def characterizeMoments(sortPath,radius,indexPath):
+        for i in xrange(len(radius)):
+            desc = ZernikeMoments(radius[i])
+            index = {}
+                    # loop over the component photos
+            for compPath in list_images(sortPath[i]):
+                    # parse out the pokemon name, then load the image and
+                    # convert it to grayscale
+                    component = compPath[compPath.rfind("/") + 1:].replace(".png", "")
+                    image = cv2.imread(compPath)
+                    h,w=image.shape[:2]
+                    print h,w
+                    print compPath
+                    image=image[int(h*0.2):int(h*0.8),int(w*0.2):int(w*0.8)]
+                    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+                    gray=cv2.bitwise_not(gray)
+                    ## blur the gray image
+            ##	kernel_size = 5
+            ##        blur_gray = cv2.GaussianBlur(gray,(kernel_size, kernel_size),0)
+            ##        cv2.imshow("preview",blur_gray)
+            ##        cv2.waitKey(0)
+                    ## create binary image
+                    ret, thresh = cv2.threshold(gray, 110,255, cv2.THRESH_BINARY)
+                    #cv2.imshow("preview",thresh)
+                   # cv2.waitKey(0)
+                    ## erode and dilate the threshed image to remove noise
+                    thresh=cv2.erode(thresh, None, iterations=1)
+                    thresh=cv2.dilate(thresh, None, iterations=1)
+                    #cv2.imshow("preview",thresh)
+                    #cv2.waitKey(0)
+                    ## create canny edge image
+                    low_threshold = 90  
+                    high_threshold =250 
+                    edges = cv2.Canny(thresh, low_threshold, high_threshold,None,3)
+                    #cv2.imshow("preview",edges)
+                    edgesCopy=edges.copy()
+                    #cv2.waitKey(0)
+                    image=edges.copy()
 
-def componentDetect(frame, fgmask,resTemp, capTemp,icTemp,ledTemp,my_path):
-        ### Detect Components in frame                
-                resMat=[]
-                capMat=[]
-                ledMat=[]
-                icMat=[]
-                resCount=0
-                capCount=0
-                ledCount=0
-                icCount=0
+                    
+                    # initialize the outline image, find the outermost
+                    # contours (the outline) of the pokemon, then draw
+                    # it
+                    outline = np.zeros(image.shape, dtype = "uint8")
+                    cnts = cv2.findContours(thresh.copy(), cv2.RETR_EXTERNAL,
+                            cv2.CHAIN_APPROX_SIMPLE)
+                    cnts = imutils.grab_contours(cnts)
+                    c=max(cnts,key=cv2.contourArea)
+                    #cnts = sorted(cnts, key = cv2.contourArea, reverse = True)[0]
+                    cv2.drawContours(outline, [c], -1, 255, -1)
+                    cv2.imshow("preview",outline)
+                    cv2.waitKey(0)
 
-                #####################
-                ####################
-                # Standard imports
-                # Setup SimpleBlobDetector parameters.
-                params = cv2.SimpleBlobDetector_Params()
-                # Change thresholds
-                params.minThreshold = 10;
-                params.maxThreshold = 200;
-                 
-                # Filter by Area.
-                params.filterByArea = True
-                params.minArea = 20
-                 
-                # Filter by Circularity
-                params.filterByCircularity = True
-                params.minCircularity = 0.2
-                 
-                # Filter by Convexity
-                params.filterByConvexity = True
-                params.minConvexity = 0.05
-                 
-                # Filter by Inertia
-                params.filterByInertia = True
-                params.minInertiaRatio = 0.01
-                 
-               
-                detector = cv2.SimpleBlobDetector_create(params)
-                
-                print params.filterByColor
-                print params.filterByArea
-                print params.filterByCircularity
-                print params.filterByInertia
-                print params.filterByConvexity
-                
-                # Read image
-                im=frame.copy()
-                gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-                fgmask_inv=cv2.bitwise_not(fgmask)
-                # Set up the detector with default parameters.
-                #detector = cv2.SimpleBlobDetector()                 
-                # Detect blobs.
-                keypoints = detector.detect(fgmask_inv)
-                 
-                # Draw detected blobs as red circles.
-                # cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS ensures the size of the circle corresponds to the size of blob
-                im_with_keypoints = cv2.drawKeypoints(fgmask_inv, keypoints, np.array([]), (0,0,255), cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
-                 
-                # Show keypoints
-                cv2.imshow("preview", im_with_keypoints)
-                cv2.waitKey(0)
+                    # compute Zernike moments to characterize the shape
+                    # of pokemon outline, then update the index
+                    moments = desc.describe(outline)
+                    index[component] = moments
+                # write the index to file            
+            filehandler = open(indexPath[i], "wb")            
+            pickle.dump(index,filehandler)
+            filehandler.close()
 
-                #######################
-                #####################
-                ## erode and dilate the threshed image to remove noise
-                #fgmask_ed=cv2.cvtColor(fgmask, cv2.COLOR_BGR2GRAY)
-                fgmask_ed=cv2.erode(fgmask, None, iterations=1)
-                ##cv2.imshow("preview",thresh)
-                ##cv2.waitKey(0)
-                fgmask_ed=cv2.dilate(fgmask_ed, None, iterations=4)
-                rows,cols = fgmask_ed.shape
-                roi = frame[0:rows, 0:cols ]
-                frameMask = cv2.bitwise_and(roi,roi,mask = fgmask_ed)
-                src_img=frameMask.copy()
-                cv2.imshow("preview",src_img)
+def momentDetect(loc_img,indexPath,radius):
+        # load the query image, convert it to grayscale, and
+        # resize it
+        image = loc_img.copy()        
+        ret, thresh = cv2.threshold(loc_img, 70,255, cv2.THRESH_BINARY)
+        cv2.imshow("preview",thresh)
+        cv2.waitKey(0)
+        ## erode and dilate the threshed image to remove noise
+        #thresh=cv2.erode(thresh, None, iterations=1)
+        #thresh=cv2.dilate(thresh, None, iterations=1)
+        #cv2.imshow("preview",thresh)
+        #cv2.waitKey(0)
+        ## create canny edge image
+        low_threshold = 90  
+        high_threshold =250 
+        edges = cv2.Canny(thresh, low_threshold, high_threshold,None,3)
+        outline = np.zeros(thresh.shape, dtype = "uint8")
+        cnts = cv2.findContours(thresh.copy(), cv2.RETR_EXTERNAL,
+                cv2.CHAIN_APPROX_SIMPLE)
+        cnts = imutils.grab_contours(cnts)
+        c=max(cnts,key=cv2.contourArea)
+        #cnts = sorted(cnts, key = cv2.contourArea, reverse = True)[0]
+        cv2.drawContours(outline, [c], -1, 255, -1)
+        cv2.imshow("preview",outline)
+        cv2.waitKey(0)
+        image=outline.copy()
+        for i in xrange(len(radius)):
+                index=pickle.load(open(indexPath[i],"rb"))
+                desc = ZernikeMoments(radius[i])
+                queryFeatures = desc.describe(image)         
+                searcher = Searcher(index)
+                results = searcher.search(queryFeatures)
+                componentName=results[0][1].upper()
+        if "RES" in componentName:
+            componentName="resistor"
+        elif "CAP" in componentName:
+            componentName="capacitor"
+        elif "LED" in componentName:
+            componentName="diode"
+        elif "IC" in componentName:
+            componentName="IC"
+        return componentName
                 
-                cv2.waitKey(0)
-                cv2.destroyAllWindows()
-                ## Check if resistors
-                for templateFile in os.listdir(os.path.join(my_path,resTemp)):
-                    tempName= os.path.join(my_path,resTemp, templateFile)
-                    tempName=os.path.join(tempName)
-                    template = cv2.imread(tempName)
-                    c,w, h  = template.shape[::-1]
-                    res = cv2.matchTemplate(src_img,template,cv2.TM_CCOEFF_NORMED)           
-                    threshold = 0.68
-                    loc = np.where( res >= threshold)
-                    for pt in zip(*loc[::-1]):
-                        cv2.rectangle(src_img, pt, (pt[0] + w, pt[1] + h), (255,0,255), 5)
-                        resMat.append([pt, (pt[0] + w, pt[1] + h)])
-                        resCount=resCount+1
-                print 'resistor matches=', resCount
-                for resistor in resMat:
-                    cv2.rectangle(src_img,resistor[0],resistor[1],(255,255,0),5)
-                cv2.imshow("preview", src_img)
-                cv2.waitKey(0)
-                ## Check if caps
-                src_img = np.copy(frameMask)
-                for templateFile in os.listdir(os.path.join(my_path,capTemp)):        
-                    tempName= os.path.join(my_path,capTemp, templateFile)
-                    template = cv2.imread(tempName)
-                    c,w, h = template.shape[::-1]
-                    res = cv2.matchTemplate(src_img,template,cv2.TM_CCOEFF_NORMED)
-                    threshold = 0.63
-                    loc = np.where( res >= threshold)
-                    for pt in zip(*loc[::-1]):
-                        cv2.rectangle(src_img, pt, (pt[0] + w, pt[1] + h), (250,200,0), 1)
-                        capMat.append([pt, (pt[0] + w, pt[1] + h)])
-                        capCount=capCount+1
-                print 'cap matches=', capCount
-                for cap in capMat:
-                    cv2.rectangle(src_img,cap[0],cap[1],(0,255,0),5)
-                cv2.imshow("preview", src_img)
-                cv2.waitKey(0)
-                cv2.destroyAllWindows()                
-                ## Check if LEDs
-                pathR=os.listdir(os.path.join(my_path,ledTemp,"R"))
-                pathB=os.listdir(os.path.join(my_path,ledTemp,"B"))
-                for templateFile in pathR:
-                    tempName= os.path.join(my_path,ledTemp,"R", templateFile)
-                    tempName=os.path.join(tempName)
-                    template = cv2.imread(tempName)
-                    #c,w, h  = template.shape[::-1]
-                    res = cv2.matchTemplate(src_img,template,cv2.TM_CCOEFF_NORMED)           
-                    threshold = 0.55
-                    loc = np.where( res >= threshold)
-                    for pt in zip(*loc[::-1]):
-                        cv2.rectangle(src_img, pt, (pt[0] + w, pt[1] + h), (200,100,100), 5)
-                        ledMat.append([pt, (pt[0] + w, pt[1] + h)])
-                        ledCount=ledCount+1
-                print 'led matches=', ledCount
-                for led in ledMat:
-                    cv2.rectangle(src_img,led[0],led[1],(0,255,255),5)
-                cv2.imshow("preview", src_img)
-                cv2.waitKey(0)
-                cv2.destroyAllWindows()
-                ## Check if ICs
-                for templateFile in os.listdir(os.path.join(my_path,icTemp)):
-                    tempName= os.path.join(my_path,icTemp, templateFile)
-                    tempName=os.path.join(tempName)
-                    template = cv2.imread(tempName)
-                    c,w, h  = template.shape[::-1]
-                    res = cv2.matchTemplate(src_img,template,cv2.TM_CCOEFF_NORMED)           
-                    threshold = 0.9
-                    loc = np.where( res >= threshold)
-                    for pt in zip(*loc[::-1]):
-                        cv2.rectangle(src_img, pt, (pt[0] + w, pt[1] + h), (0,100,250), 5)
-                        icMat.append([pt, (pt[0] + w, pt[1] + h)])
-                        icCount=icCount+1
-                print 'IC matches=', icCount
-                for ic in icMat:
-                    cv2.rectangle(src_img,ic[0],ic[1],(0,0,0),-1)
-                cv2.imshow("preview", src_img)
-                cv2.waitKey(0)
-                cv2.destroyAllWindows()
-                compCount=[resCount,capCount,ledCount,icCount]
-                namMat=["resistor","capacitor","diode","IC"]
-                compCountNum=max(compCount)
-                for ind in xrange(len(compCount)):
-                        if compCount[ind]==compCountNum:
-                                compName=namMat[ind]
-                print compName            
-                #return resCount,capCount,ledCount,icCount
-                #componentName="resistor"
-                return compName
+        
 
 def componentLocate(fgmask,frame, resCount,capCount,ledCount,icCount):
 ############# LOCATION FIND ######################
@@ -791,9 +771,9 @@ def componentLocate(fgmask,frame, resCount,capCount,ledCount,icCount):
         low_threshold = 90  
         high_threshold =250 
         edges = cv2.Canny(thresh, low_threshold, high_threshold,None,3)
-##        cv2.imshow("preview",edges)
+        cv2.imshow("preview",edges)
         edgesCopy=edges.copy()
-##        cv2.waitKey(0)
+        cv2.waitKey(0)
 
         ##h,w=img_rgb.shape[:2]
         ##mask=np.zeros((h+2,w+2),np.uint8)
@@ -817,7 +797,7 @@ def componentLocate(fgmask,frame, resCount,capCount,ledCount,icCount):
         ## find the contour with the biggest area
         if len(cnts)>0:
             c=max(cnts,key=cv2.contourArea)
-            epsilon=0.1*cv2.arcLength(c,True)
+            epsilon=0.05*cv2.arcLength(c,True)
         else:
             print "error no contours found"
             return none
@@ -842,8 +822,8 @@ def componentLocate(fgmask,frame, resCount,capCount,ledCount,icCount):
         approx_img=frame.copy()
         approx=cv2.approxPolyDP(c,epsilon,True)
         cv2.drawContours(approx_img,[approx],-1,(255,255,0),3)
-##        cv2.imshow("preview",approx_img)
-##        cv2.waitKey(0)
+        cv2.imshow("preview",approx_img)
+        cv2.waitKey(0)
         cr_c=approx
         ## convex hull the contour
         hull = cv2.convexHull(c)
@@ -851,7 +831,11 @@ def componentLocate(fgmask,frame, resCount,capCount,ledCount,icCount):
         cv2.drawContours(hull_img,[hull],-1,(255,255,0),3)
         cv2.imshow("preview",hull_img)
         cv2.waitKey(0)
-
+        ## create a masked image
+        outline=np.zeros(frame.shape,dtype="uint8")
+        cv2.drawContours(outline,[hull],-1,255,-1)
+        cv2.imshow("preview",outline)
+        cv2.waitKey(0)
          ######################
         #########################
         ######################
@@ -859,7 +843,7 @@ def componentLocate(fgmask,frame, resCount,capCount,ledCount,icCount):
 
         ## railLocate
         rail1,rail2=railLocate(hull,img_rgb,thresh_orig)
-        return rail1, rail2
+        return rail1, rail2,outline
                 
                     
                     
@@ -916,7 +900,9 @@ def cross_rails(c_hull,img_rgb,thresh_img,minr3,maxr3,minr2,maxr2):
             r3_rail_check[ind1]=r3_rail_check[ind1]+1
             
     rail1= np.nonzero(r3_rail_check)
+    print "rail1",rail1
     rail2= np.nonzero(r2_rail_check)
+    print "rail2",rail2
     if max(r3_rail_check)==0:
         print "no matches found in region3, using area method"
         rail1=((maxr3+ minr3)/2)-1
@@ -1091,6 +1077,7 @@ def railLocate(c,img_rgb,thresh_img):
             return (31-maxr3), (31-minr3)            
         elif (len(r3_ind)>0) and (len(r2_ind)>0):
             print "cross rails"
+            print r3_ind,r2_ind
             minr3=min(r3_ind)+1
             maxr3=max(r3_ind)+1
             minr2=min(r2_ind)+1

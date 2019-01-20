@@ -25,7 +25,7 @@ print "initializing program"
     #TBD
     #setup GUI
 #RUN WITH ARDUINO WORKING?
-elecHardware = True
+elecHardware = False
 photoHardware = True
 
 
@@ -50,11 +50,11 @@ figPathR = 'cam_data\snapshots\R'
 figPathB = 'cam_data\snapshots\B'
 figSavePath = 'cam_data\Match'
 ##
-capTemp=r'cam_data\templates\caps'
-icTemp=r'cam_data\templates\ic'
-ledTemp=r'cam_data\templates\led'
-resTemp=r'cam_data\templates\resistors\R'
+photoPath=r'cam_data\templates\photos'
 my_path = os.path.abspath(os.path.dirname(__file__))
+radius=[35]
+indexPath=[r'cam_data\templates\index\index.txt']
+sortPath=[photoPath]
 ##
 
 
@@ -80,8 +80,8 @@ while(LETSCALIBRATE):
 
     vc.set(cv2.CAP_PROP_AUTO_EXPOSURE,1)
     vc.set(cv2.CAP_PROP_AUTOFOCUS,1)
-    vc.set(cv2.CAP_PROP_BRIGHTNESS,145)
-    vc.set(cv2.CAP_PROP_CONTRAST,35)
+    vc.set(cv2.CAP_PROP_BRIGHTNESS,140)
+    vc.set(cv2.CAP_PROP_CONTRAST,45)
     if vc.isOpened(): # try to get the first frame
         rval, frame = vc.read()
     else:
@@ -98,6 +98,7 @@ while(LETSCALIBRATE):
             rval, frame = vc.read()
             break
     calibrate(frame)
+    characterizeMoments(sortPath,radius,indexPath)
     cv2.destroyAllWindows()
     vc.release()
 
@@ -125,28 +126,18 @@ while(LETSBUILD):
         vc = cv2.VideoCapture(0) #start and define video capture
         vc.set(cv2.CAP_PROP_AUTO_EXPOSURE,1)
         vc.set(cv2.CAP_PROP_AUTOFOCUS,1)
-        vc.set(cv2.CAP_PROP_BRIGHTNESS,150)
+        vc.set(cv2.CAP_PROP_BRIGHTNESS,140)
         vc.set(cv2.CAP_PROP_CONTRAST,45)
         fgbg=cv2.createBackgroundSubtractorMOG2(history=1000, varThreshold=79, detectShadows=True) #setting function parameters, not actual frames
         subFlag=1 #later
         if vc.isOpened(): # try to get the first frame - check if camera is opened
             rval, frameRaw = vc.read()
-            print "waiting ....",
-            for i in xrange(1,500):
-                print ".",
-                rval, frameRaw = vc.read()
-                frame=four_point_transform(frameRaw,bbpoints)
-                fgmask = fgbg.apply(frame)
-                cv2.waitKey(20)
-                cv2.imshow("backgroundSubtract",fgmask)
-                cv2.imshow("preview",frame)
         else:
             rval = False #if it doesn't work, we have problems....deal with those later!
         while rval:
             #perform transformations
             ## four point transform image
-            rval, frameRaw= vc.read()
-            
+            rval, frameRaw= vc.read()            
             frame=four_point_transform(frameRaw,bbpoints)
             railOver=frame.copy()
             for ind in xrange(len(r2_rails)):
@@ -166,27 +157,18 @@ while(LETSBUILD):
                 break
             if key == 98: #pause the videoCapture for user to place component
                 subFlag=0 #stop taking video feed background subtract - in future may stop video here then background subtract after
+                rval, frameRaw= vc.read()            
+                frame=four_point_transform(frameRaw,bbpoints)
+                firstFrame=cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
             if key == 99: #component has been placed. Now time to detect and locate
                 subFlag=1
-                #wait 3 seconds for the camera to focus
-                print "waiting ....",                
-                for i in xrange(1,200):
-                    rval, frameRaw = vc.read() #read the frame
-                    key = cv2.waitKey(20)
-                    print ".",
-                    frame=four_point_transform(frameRaw,bbpoints)                    
-                    cv2.imshow("preview",frame)                
-                cv2.imshow("backgroundSubtract",fgmask)
-                for i in xrange(1,15):
-                    rval, frameRaw = vc.read() #read the frame
-                    key = cv2.waitKey(20)
-                    print ".",
-                    frame=four_point_transform(frameRaw,bbpoints)
-                    fgmask = fgbg.apply(frame) #subtract
-                    cv2.imshow("preview",frame)
-                    cv2.imshow("backgroundSubtract",fgmask)
-
-                
+                rval, frameRaw = vc.read() #read the frame
+                frame=four_point_transform(frameRaw,bbpoints)                    
+                cv2.imshow("preview",frame)
+                newFrame=cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                frameDelta=cv2.absdiff(firstFrame,newFrame)
+                threshDelta = cv2.threshold(frameDelta, 25, 255, cv2.THRESH_BINARY)[1]                
+                cv2.imshow("backgroundSubtract",fgmask)                
                 now=datetime.datetime.now() #getting time for filename
                 # save the real frame and background subtracted frame
                 my_path = os.path.abspath(os.path.dirname(__file__))
@@ -196,12 +178,12 @@ while(LETSBUILD):
                 #completeNameR = os.path.join(figPathR, fileName + 'R.png')
                 completeNameR=figPathR+'\\'+fileName+'R.png'
                 snapshot(completeNameB,rval,fgmask) #save snapshot
-                snapshot(completeNameR,rval,frame)
-                #component detection
-                compType=componentDetect(frame, fgmask, resTemp, capTemp,icTemp,ledTemp,my_path)
-                #component location
-                railOne,railTwo=componentLocate(fgmask,frame, 1,0,0,0)
-                print railOne,railTwo
+                snapshot(completeNameR,rval,frame) 
+                hull,img_rgb,thresh_orig,loc_img=componentLocate(threshDelta,frame, 1,0,0,0)
+                compType=momentDetect(loc_img,indexPath,radius)
+                print "component type: ", compType
+                rail1,rail2=railLocate(hull,img_rgb,thresh_orig)
+                print railOne,railTwo     
                 # continue while loop for user to add another component.        
         cv2.destroyAllWindows()
 
@@ -219,6 +201,12 @@ while(LETSBUILD):
                 print "Moving on to Jamesons mods...."
             else:
                 compType = raw_input("enter comp type: ")
+            manualType = raw_input("Confirm rails? (y/n) ")
+            if (manualType == "y"):
+                print "Moving on to Jamesons mods...."
+            else:
+                railOne = raw_input("enter railOne: ")
+                railTwo = raw_input("enter railTwo: ")
         else:
             continue
 
@@ -286,16 +274,22 @@ while(LETSBUILD):
                 print compVal
                 if compVal == arduinoController.CONSTANTS["FORWARD_BIAS"]:
                     print "Forward Biased. Flows from rail " + str(railOne) + " to " + str(railTwo)
+                    compVal = "forward"
                 else:
                     print "Reverse Biased. Flows from rail " + str(railOne) + " to " + str(railTwo)
-            else:
+                    compVal = "reverse"
+            else:   
                 print "Error: Unexpected input. Discarding command"
             print compVal
 
             print "Component is added!"
             nextComponent = Component()
             print "HERE!!! " + str(compType)
-            nextComponent.newComponent(compType,str(int(compVal)),"default",railOne,railTwo) #VALUES NEED TO BE CORRECTED
+            try:
+                int(compVal)
+            except ValueError:
+                str(compVal)
+            nextComponent.newComponent(compType,str(compVal),"default",railOne,railTwo) #VALUES NEED TO BE CORRECTED
             grid.addComponent(nextComponent)
             print grid.getNodes()
             grid.drawGrid()
@@ -314,12 +308,15 @@ while(LETSBUILD):
 
 ##    grid.drawGrid()
 
-    moveOn = raw_input("Component added...move on to Check? (yes/no): ")
+    moveOn = raw_input("Component added...move on to Check? (yes/no/exit): ")
     if (moveOn == "yes"):
         LETSBUILD = False
         print "Moving on to CHECK mode...."
-    else:
+    elif (moveOn == "no"):
         continue
+    else:
+        print "Powering off...ending program...."
+        exit()
 
 
 LETSCHECK = True
@@ -353,7 +350,7 @@ while(LETSRUN):
         print i, ans[i]
 
     count = count + 1
-    if (count > 100):
+    if (count > 25):
         moveOn = raw_input("Run board again? (yes/no): ")
         if (moveOn=="no"):
             print "Powering off!"
